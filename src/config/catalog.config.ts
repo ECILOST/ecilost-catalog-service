@@ -19,6 +19,18 @@ export class EnvironmentVariables {
   /** Deben coincidir con los del emisor, o ningun token verificara. */
   @IsNotEmpty() @IsString() JWT_ISSUER: string;
   @IsNotEmpty() @IsString() JWT_AUDIENCE: string;
+
+  /**
+   * Almacen de objetos donde viven las fotografias y el video (HU-07).
+   *
+   * Solo datos de conexion. Los limites de tamano y de cantidad no estan aqui porque
+   * describen el producto y no el despliegue: viven en `media-asset/domain/media-policy.ts`.
+   */
+  @IsUrl({ require_tld: false }) MEDIA_S3_ENDPOINT: string;
+  @IsNotEmpty() @IsString() MEDIA_S3_REGION: string;
+  @IsNotEmpty() @IsString() MEDIA_S3_BUCKET: string;
+  @IsNotEmpty() @IsString() MEDIA_S3_ACCESS_KEY: string;
+  @IsNotEmpty() @IsString() MEDIA_S3_SECRET_KEY: string;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables {
@@ -43,6 +55,11 @@ export class CatalogConfig {
   readonly authJwksUrl: string;
   readonly jwtIssuer: string;
   readonly jwtAudience: string;
+  readonly mediaEndpoint: string;
+  readonly mediaRegion: string;
+  readonly mediaBucket: string;
+  readonly mediaAccessKey: string;
+  readonly mediaSecretKey: string;
 
   constructor(env: EnvironmentVariables) {
     this.databaseUrl = env.DATABASE_URL;
@@ -50,6 +67,11 @@ export class CatalogConfig {
     this.authJwksUrl = env.AUTH_JWKS_URL;
     this.jwtIssuer = env.JWT_ISSUER;
     this.jwtAudience = env.JWT_AUDIENCE;
+    this.mediaEndpoint = env.MEDIA_S3_ENDPOINT;
+    this.mediaRegion = env.MEDIA_S3_REGION;
+    this.mediaBucket = env.MEDIA_S3_BUCKET;
+    this.mediaAccessKey = env.MEDIA_S3_ACCESS_KEY;
+    this.mediaSecretKey = env.MEDIA_S3_SECRET_KEY;
   }
 }
 

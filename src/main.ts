@@ -39,6 +39,7 @@ function setupSwagger(app: Parameters<typeof SwaggerModule.createDocument>[0]): 
     .setDescription(API_DESCRIPTION)
     .setVersion('1.0.0')
     .addTag('Items', 'Registro y administracion de objetos perdidos')
+    .addTag('Multimedia', 'Fotografias y video que documentan el estado del objeto')
     .addTag('Health', 'Liveness')
     .addBearerAuth(
       {

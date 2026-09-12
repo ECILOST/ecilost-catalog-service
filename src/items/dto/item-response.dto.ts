@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemCondition, ItemStatus } from '../../generated/prisma/enums.js';
+import {
+  MediaResponseDto,
+  toMediaResponse,
+} from '../../media-asset/dto/media-response.dto.js';
+import type { ItemMedia } from '../../media-asset/entities/media-asset.entity.js';
 import type { Item } from '../entities/item.entity.js';
 
 /**
@@ -77,5 +82,38 @@ export function toItemResponse(item: Item): ItemResponseDto {
     registeredAt: item.registeredAt,
     lastModifiedBy: item.lastModifiedBy,
     lastModifiedAt: item.lastModifiedAt,
+  };
+}
+
+/**
+ * La ficha completa del objeto: sus datos mas su multimedia (HU-07, HU-08).
+ *
+ * Solo la consulta de un objeto la devuelve. El listado sigue entregando `ItemResponseDto`
+ * a secas, porque firmar las URL de cada pieza de cada objeto de la pagina costaria una
+ * ronda por objeto para algo que la lista no muestra.
+ */
+export class ItemDetailResponseDto extends ItemResponseDto {
+  @ApiProperty({
+    type: [MediaResponseDto],
+    description:
+      'Fotografias del objeto, ya ordenadas. Arreglo vacio si todavia no tiene ninguna.',
+  })
+  photos: MediaResponseDto[];
+
+  @ApiProperty({
+    type: MediaResponseDto,
+    nullable: true,
+    description:
+      'El video del objeto, o `null` si no tiene. Nunca falta el campo: una ficha sin ' +
+      'video debe poder renderizarse igual que una con video.',
+  })
+  video: MediaResponseDto | null;
+}
+
+export function toItemDetailResponse(item: Item, media: ItemMedia): ItemDetailResponseDto {
+  return {
+    ...toItemResponse(item),
+    photos: media.photos.map(toMediaResponse),
+    video: media.video ? toMediaResponse(media.video) : null,
   };
 }

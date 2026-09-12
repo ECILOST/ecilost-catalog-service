@@ -17,5 +17,36 @@ services:
       timeout: 5s
       retries: 10
 
+  # Almacen de objetos para las fotografias y el video (HU-07). Habla el protocolo de S3,
+  # asi que el mismo adaptador sirve contra AWS S3, Cloudflare R2 o este mismo MinIO
+  # desplegado en un contenedor: solo cambian las variables MEDIA_S3_* del entorno.
+  #
+  # La consola web queda en http://localhost:9001 con las credenciales de abajo, util para
+  # ver que se subio sin consultar la base.
+  minio:
+    # Desde quay.io y no desde Docker Hub: MinIO cerro su repositorio publico alli y
+    # `docker pull minio/minio` responde "pull access denied". quay.io es su registro
+    # oficial. La version va fijada a proposito, como la de postgres.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: ecilost-catalog-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ecilost
+      MINIO_ROOT_PASSWORD: ecilostsecret
+    ports:
+      # 9000 lo alcanza tanto el servicio como el navegador, que es lo que exige firmar
+      # URL de lectura: el cliente baja los archivos de aqui, sin pasar por NestJS.
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - ecilost-catalog-media:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   ecilost-catalog-pgdata:
+  ecilost-catalog-media:

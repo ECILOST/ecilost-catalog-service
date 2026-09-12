@@ -35,6 +35,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { ProblemType } from '../common/http/problem-details.js';
 import { ProblemException } from '../common/http/problem.exception.js';
+import { MediaAssetService } from '../media-asset/media-asset.service.js';
 import {
   InvalidStatusTransitionError,
   ItemInUseError,
@@ -42,7 +43,12 @@ import {
 } from './domain/item-errors.js';
 import { CreateItemDto } from './dto/create-item.dto.js';
 import { DeleteItemQueryDto } from './dto/delete-item-query.dto.js';
-import { ItemResponseDto, toItemResponse } from './dto/item-response.dto.js';
+import {
+  ItemDetailResponseDto,
+  ItemResponseDto,
+  toItemDetailResponse,
+  toItemResponse,
+} from './dto/item-response.dto.js';
 import { ListItemsQueryDto } from './dto/list-items-query.dto.js';
 import { UpdateItemDto, toItemPatch } from './dto/update-item.dto.js';
 import { ItemsService } from './items.service.js';
@@ -58,7 +64,10 @@ import { ItemVersionConflictError } from './ports/item.repository.js';
 // Todo el catalogo exige sesion. El rol solo se restringe donde se escribe.
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ItemsController {
-  constructor(private readonly items: ItemsService) {}
+  constructor(
+    private readonly items: ItemsService,
+    private readonly media: MediaAssetService,
+  ) {}
 
   @Post()
   @Roles(Role.STAFF)
@@ -134,11 +143,23 @@ export class ItemsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Consultar un objeto',
-    description:
-      'Ficha completa del objeto. Incluye `version`, que hay que devolver al editarlo ' +
-      'para que el servicio detecte si alguien lo modifico entre medias.',
+    description: [
+      'Ficha completa del objeto: sus datos, sus fotografias y su video.',
+      '',
+      'Incluye `version`, que hay que devolver al editarlo para que el servicio detecte si',
+      'alguien lo modifico entre medias.',
+      '',
+      'La multimedia viaja aqui y no en un recurso aparte para que abrir una ficha sea una',
+      'sola peticion. `photos` puede venir vacio y `video` puede venir en `null`, pero',
+      'ninguno de los dos campos falta nunca: un objeto sin video se renderiza igual de',
+      'bien que uno con video.',
+      '',
+      'Los enlaces de cada pieza son de vida corta y apuntan al almacen, no a este',
+      'servicio. El navegador baja los archivos directamente, de modo que varios',
+      'estudiantes abriendo la misma ficha no compiten por este proceso.',
+    ].join('\n'),
   })
-  @ApiOkResponse({ description: 'El objeto solicitado.', type: ItemResponseDto })
+  @ApiOkResponse({ description: 'El objeto solicitado.', type: ItemDetailResponseDto })
   @ApiNotFoundResponse({
     description: 'No existe un objeto con ese identificador.',
     type: ProblemDetailsDto,
@@ -147,9 +168,12 @@ export class ItemsController {
     description: 'El identificador no tiene forma de UUID.',
     type: ProblemDetailsDto,
   })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ItemResponseDto> {
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ItemDetailResponseDto> {
     try {
-      return toItemResponse(await this.items.findById(id));
+      const item = await this.items.findById(id);
+      // Se pide despues de confirmar que el objeto existe: firmar las URL de una ficha que
+      // va a responder 404 seria trabajo tirado.
+      return toItemDetailResponse(item, await this.media.findByItem(id));
     } catch (error) {
       throw this.asHttp(error);
     }

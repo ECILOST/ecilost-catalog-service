@@ -115,6 +115,12 @@ function typeFor(status: number): string {
       return ProblemType.NOT_FOUND;
     case HttpStatus.CONFLICT:
       return ProblemType.VERSION_CONFLICT;
+    // Los dos los produce Multer al cortar una subida, antes de que el controlador llegue
+    // a decidir nada. Sin estos casos saldrian etiquetados como error interno.
+    case HttpStatus.PAYLOAD_TOO_LARGE:
+      return ProblemType.MEDIA_TOO_LARGE;
+    case HttpStatus.UNSUPPORTED_MEDIA_TYPE:
+      return ProblemType.UNSUPPORTED_MEDIA;
     default:
       return ProblemType.INTERNAL;
   }
@@ -132,6 +138,10 @@ function titleFor(status: number): string {
       return 'El recurso no existe';
     case HttpStatus.CONFLICT:
       return 'Conflicto con el estado actual del recurso';
+    case HttpStatus.PAYLOAD_TOO_LARGE:
+      return 'El archivo pesa demasiado';
+    case HttpStatus.UNSUPPORTED_MEDIA_TYPE:
+      return 'El archivo no es de un tipo soportado';
     default:
       return 'Error interno del servicio';
   }

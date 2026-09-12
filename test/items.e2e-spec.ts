@@ -14,6 +14,9 @@ import { JwtAuthGuard, type RequestWithPrincipal } from '../src/common/guards/jw
 import { RolesGuard } from '../src/common/guards/roles.guard.js';
 import { ItemsModule } from '../src/items/items.module.js';
 import { ITEM_REPOSITORY } from '../src/items/ports/item.repository.js';
+import { MEDIA_ASSET_REPOSITORY } from '../src/media-asset/ports/media-asset.repository.js';
+import { MEDIA_STORAGE } from '../src/media-asset/ports/media-storage.js';
+import { FakeMediaAssetRepository, FakeMediaStorage } from './helpers/fake-media.js';
 import { FakeItemRepository } from './helpers/fake-repositories.js';
 
 const FUNCIONARIO = new Principal('11111111-1111-4111-8111-111111111111', 'STAFF');
@@ -56,6 +59,14 @@ describe('Items (e2e)', () => {
     })
       .overrideProvider(ITEM_REPOSITORY)
       .useValue(repository)
+      // La ficha del objeto incluye su multimedia (HU-07), asi que ItemsModule arrastra al
+      // modulo que la administra. Sus dos puertos se sustituyen por dobles para que esta
+      // suite siga sin necesitar Postgres ni almacen de objetos. Lo que se ejercita aqui
+      // son los objetos; la multimedia tiene su propia suite.
+      .overrideProvider(MEDIA_ASSET_REPOSITORY)
+      .useValue(new FakeMediaAssetRepository(repository))
+      .overrideProvider(MEDIA_STORAGE)
+      .useValue(new FakeMediaStorage())
       .overrideGuard(JwtAuthGuard)
       .useClass(StubAuthGuard)
       .compile();
