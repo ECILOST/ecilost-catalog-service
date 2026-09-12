@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeItemRepository } from '../../test/helpers/fake-repositories.js';
-import { ItemNotFoundError } from './domain/item-errors.js';
+import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
 import { ItemsService } from './items.service.js';
 import { DEFAULT_PAGE_SIZE } from './dto/list-items-query.dto.js';
-import type { RegisterItemInput } from './ports/item.repository.js';
+import {
+  ItemVersionConflictError,
+  type RegisterItemInput,
+} from './ports/item.repository.js';
 
 const FUNCIONARIO = '11111111-1111-4111-8111-111111111111';
+const OTRO_FUNCIONARIO = '44444444-4444-4444-8444-444444444444';
 
 function alta(overrides: Partial<RegisterItemInput> = {}): RegisterItemInput {
   return {
@@ -131,6 +135,179 @@ describe('ItemsService', () => {
     it('lanza un error de dominio cuando no existe', async () => {
       // El servicio no conoce HTTP: quien traduce esto a 404 es el controlador.
       await expect(service.findById('no-existe')).rejects.toBeInstanceOf(ItemNotFoundError);
+    });
+  });
+
+  describe('update (HU-04)', () => {
+    it('persiste el cambio con su autor y marca de ultima modificacion', async () => {
+      const item = repository.seed();
+
+      const actualizado = await service.update({
+        id: item.id,
+        expectedVersion: 0,
+        patch: { description: 'Ahora con el cargador incluido.' },
+        lastModifiedBy: OTRO_FUNCIONARIO,
+      });
+
+      expect(actualizado.description).toBe('Ahora con el cargador incluido.');
+      expect(actualizado.lastModifiedBy).toBe(OTRO_FUNCIONARIO);
+      expect(actualizado.lastModifiedAt.getTime()).toBeGreaterThanOrEqual(
+        item.lastModifiedAt.getTime(),
+      );
+    });
+
+    it('incrementa la version en cada escritura aceptada', async () => {
+      const item = repository.seed();
+
+      const primera = await service.update({
+        id: item.id,
+        expectedVersion: 0,
+        patch: { name: 'Uno' },
+        lastModifiedBy: FUNCIONARIO,
+      });
+      const segunda = await service.update({
+        id: item.id,
+        expectedVersion: primera.version,
+        patch: { name: 'Dos' },
+        lastModifiedBy: FUNCIONARIO,
+      });
+
+      expect(primera.version).toBe(1);
+      expect(segunda.version).toBe(2);
+    });
+
+    it('no toca los campos ausentes', async () => {
+      const item = repository.seed({ name: 'Sombrilla azul', category: 'Accesorios' });
+
+      const actualizado = await service.update({
+        id: item.id,
+        expectedVersion: 0,
+        patch: { name: 'Sombrilla azul marino' },
+        lastModifiedBy: FUNCIONARIO,
+      });
+
+      expect(actualizado.name).toBe('Sombrilla azul marino');
+      expect(actualizado.category).toBe('Accesorios');
+      expect(actualizado.condition).toBe(item.condition);
+    });
+
+    it('rechaza una version ya superada', async () => {
+      const item = repository.seed();
+      await service.update({
+        id: item.id,
+        expectedVersion: 0,
+        patch: { name: 'Uno' },
+        lastModifiedBy: FUNCIONARIO,
+      });
+
+      await expect(
+        service.update({
+          id: item.id,
+          expectedVersion: 0,
+          patch: { name: 'Tarde' },
+          lastModifiedBy: OTRO_FUNCIONARIO,
+        }),
+      ).rejects.toBeInstanceOf(ItemVersionConflictError);
+    });
+
+    it('distingue un objeto inexistente de una version vieja', async () => {
+      // Para el adaptador las dos son cero filas afectadas; para el cliente no.
+      await expect(
+        service.update({
+          id: '33333333-3333-4333-8333-333333333333',
+          expectedVersion: 0,
+          patch: { name: 'Fantasma' },
+          lastModifiedBy: FUNCIONARIO,
+        }),
+      ).rejects.toBeInstanceOf(ItemNotFoundError);
+    });
+
+    it('dos funcionarios editando a la vez: una entra y la otra se rechaza', async () => {
+      const item = repository.seed();
+
+      const resultados = await Promise.allSettled([
+        service.update({
+          id: item.id,
+          expectedVersion: 0,
+          patch: { name: 'A' },
+          lastModifiedBy: FUNCIONARIO,
+        }),
+        service.update({
+          id: item.id,
+          expectedVersion: 0,
+          patch: { name: 'B' },
+          lastModifiedBy: OTRO_FUNCIONARIO,
+        }),
+      ]);
+
+      const aceptadas = resultados.filter((r) => r.status === 'fulfilled');
+      const rechazadas = resultados.filter((r) => r.status === 'rejected');
+
+      expect(aceptadas).toHaveLength(1);
+      expect(rechazadas).toHaveLength(1);
+      expect((rechazadas[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+        ItemVersionConflictError,
+      );
+
+      // Ni se pierde ni se mezcla: el objeto quedo con uno de los dos nombres, entero.
+      const final = await service.findById(item.id);
+      expect(['A', 'B']).toContain(final.name);
+      expect(final.version).toBe(1);
+    });
+
+    describe('cambio de estado', () => {
+      it('permite retirar un objeto disponible', async () => {
+        const item = repository.seed({ status: 'AVAILABLE' });
+
+        const actualizado = await service.update({
+          id: item.id,
+          expectedVersion: 0,
+          patch: { status: 'WITHDRAWN' },
+          lastModifiedBy: FUNCIONARIO,
+        });
+
+        expect(actualizado.status).toBe('WITHDRAWN');
+      });
+
+      it('rechaza declarar vendido a mano', async () => {
+        // Esa transicion la mueve la adjudicacion, no el formulario del catalogo.
+        const item = repository.seed({ status: 'AVAILABLE' });
+
+        await expect(
+          service.update({
+            id: item.id,
+            expectedVersion: 0,
+            patch: { status: 'SOLD' },
+            lastModifiedBy: FUNCIONARIO,
+          }),
+        ).rejects.toBeInstanceOf(InvalidStatusTransitionError);
+      });
+
+      it('rechaza sacar un objeto de una ronda a mano', async () => {
+        const item = repository.seed({ status: 'IN_ROUND', roundId: 'ronda-1' });
+
+        await expect(
+          service.update({
+            id: item.id,
+            expectedVersion: 0,
+            patch: { status: 'AVAILABLE' },
+            lastModifiedBy: FUNCIONARIO,
+          }),
+        ).rejects.toBeInstanceOf(InvalidStatusTransitionError);
+      });
+
+      it('no falla si el PATCH reenvia el estado actual junto con otros campos', async () => {
+        const item = repository.seed({ status: 'IN_ROUND', roundId: 'ronda-1' });
+
+        const actualizado = await service.update({
+          id: item.id,
+          expectedVersion: 0,
+          patch: { status: 'IN_ROUND', description: 'Se le agrego el numero de serie.' },
+          lastModifiedBy: FUNCIONARIO,
+        });
+
+        expect(actualizado.status).toBe('IN_ROUND');
+      });
     });
   });
 });

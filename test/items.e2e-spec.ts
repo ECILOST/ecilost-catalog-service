@@ -238,4 +238,131 @@ describe('Items (e2e)', () => {
       expect(status).toBe(400);
     });
   });
+
+  describe('PATCH /items/:id — HU-04', () => {
+    it('aplica el cambio, incrementa la version y registra al autor', async () => {
+      const item = repository.seed();
+
+      const { body, status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, description: 'Ahora con el cargador incluido.' });
+
+      expect(status).toBe(200);
+      expect(body).toMatchObject({
+        description: 'Ahora con el cargador incluido.',
+        version: 1,
+        lastModifiedBy: FUNCIONARIO.userId,
+      });
+    });
+
+    it('deja intactos los campos que no vienen en la peticion', async () => {
+      const item = repository.seed({ name: 'Sombrilla azul', category: 'Accesorios' });
+
+      const { body } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, name: 'Sombrilla azul marino' });
+
+      expect(body.name).toBe('Sombrilla azul marino');
+      expect(body.category).toBe('Accesorios');
+    });
+
+    it('exige la version: sin ella responde 400', async () => {
+      const item = repository.seed();
+
+      const { body, status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ name: 'Sin version' });
+
+      expect(status).toBe(400);
+      expect(JSON.stringify(body)).toContain('version');
+    });
+
+    it('responde 409 cuando la version ya quedo vieja', async () => {
+      const item = repository.seed();
+      await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, name: 'Primero' });
+
+      const { body, status, headers } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, name: 'Tarde' });
+
+      expect(status).toBe(409);
+      expect(headers['content-type']).toContain('application/problem+json');
+      expect(body.type).toContain('conflicto-de-version');
+    });
+
+    it('dos peticiones simultaneas con la misma version: una 200 y una 409', async () => {
+      // Es el criterio central de la HU-04. Lo que se ejerce aqui es el contrato; la
+      // carrera real contra Postgres necesita la base viva y va en la prueba de
+      // integracion.
+      const item = repository.seed();
+
+      const respuestas = await Promise.all([
+        request(app.getHttpServer()).patch(`/items/${item.id}`).send({ version: 0, name: 'A' }),
+        request(app.getHttpServer()).patch(`/items/${item.id}`).send({ version: 0, name: 'B' }),
+      ]);
+
+      const codigos = respuestas.map((r) => r.status).sort();
+      expect(codigos).toEqual([200, 409]);
+
+      // Ni se pierde ni se mezcla: quedo uno de los dos nombres, en version 1.
+      const final = repository.rows.get(item.id);
+      expect(['A', 'B']).toContain(final?.name);
+      expect(final?.version).toBe(1);
+    });
+
+    it('responde 404 cuando el objeto no existe, no 409', async () => {
+      const { body, status } = await request(app.getHttpServer())
+        .patch('/items/33333333-3333-4333-8333-333333333333')
+        .send({ version: 0, name: 'Fantasma' });
+
+      expect(status).toBe(404);
+      expect(body.status).toBe(404);
+    });
+
+    it('permite retirar un objeto disponible', async () => {
+      const item = repository.seed({ status: 'AVAILABLE' });
+
+      const { body, status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, status: 'WITHDRAWN' });
+
+      expect(status).toBe(200);
+      expect(body.status).toBe('WITHDRAWN');
+    });
+
+    it('rechaza declarar vendido a mano, con un type distinto al de version', async () => {
+      const item = repository.seed({ status: 'AVAILABLE' });
+
+      const { body, status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, status: 'SOLD' });
+
+      expect(status).toBe(409);
+      expect(body.type).toContain('transicion-invalida');
+    });
+
+    it('el estudiante recibe 403 y el objeto no cambia', async () => {
+      const item = repository.seed({ name: 'Intacto' });
+      actor = ESTUDIANTE;
+
+      const { status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, name: 'Modificado' });
+
+      expect(status).toBe(403);
+      expect(repository.rows.get(item.id)?.name).toBe('Intacto');
+    });
+
+    it('rechaza campos desconocidos en vez de ignorarlos', async () => {
+      const item = repository.seed();
+
+      const { status } = await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, registeredBy: 'otra-persona' });
+
+      expect(status).toBe(400);
+    });
+  });
 });

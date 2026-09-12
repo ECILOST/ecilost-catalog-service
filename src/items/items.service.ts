@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Item } from './entities/item.entity.js';
-import { ItemNotFoundError } from './domain/item-errors.js';
+import { canStaffTransition, type Item } from './entities/item.entity.js';
+import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
 import {
   ITEM_REPOSITORY,
+  ItemVersionConflictError,
   type ItemFilter,
   type ItemRepository,
   type RegisterItemInput,
+  type UpdateItemInput,
 } from './ports/item.repository.js';
 
 @Injectable()
@@ -34,7 +36,44 @@ export class ItemsService {
     return this.items.findAll(filter);
   }
 
-  async findById(id: string): Promise<Item> {
+  findById(id: string): Promise<Item> {
+    return this.requireById(id);
+  }
+
+  /**
+   * HU-04: edita el objeto si nadie lo cambio desde que el funcionario lo leyo.
+   *
+   * La escritura la arbitra la base con la version en el WHERE. Aqui solo se decide que
+   * transiciones de estado puede hacer una persona a mano y como se llama cada fallo.
+   */
+  async update(input: UpdateItemInput): Promise<Item> {
+    // Validar la transicion exige conocer el estado actual, asi que hay una lectura previa.
+    // No abre una ventana de carrera: si alguien cambia el objeto entre esta lectura y la
+    // escritura, cambia tambien su version, y el UPDATE condicional no encuentra fila. La
+    // lectura decide el mensaje de error; la version decide quien gana.
+    if (input.patch.status !== undefined) {
+      const current = await this.requireById(input.id);
+      if (!canStaffTransition(current.status, input.patch.status)) {
+        throw new InvalidStatusTransitionError(current.status, input.patch.status);
+      }
+    }
+
+    try {
+      const updated = await this.items.update(input);
+      this.logger.log(
+        `Objeto ${updated.id} editado por ${input.lastModifiedBy}, version ${updated.version}`,
+      );
+      return updated;
+    } catch (error) {
+      // El adaptador no distingue "no existe" de "version vieja": las dos son cero filas
+      // afectadas. La diferencia si le importa al cliente, asi que se resuelve aqui, y
+      // solo en la rama de error.
+      if (error instanceof ItemVersionConflictError) await this.requireById(input.id);
+      throw error;
+    }
+  }
+
+  private async requireById(id: string): Promise<Item> {
     const item = await this.items.findById(id);
     if (!item) throw new ItemNotFoundError(id);
     return item;

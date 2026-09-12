@@ -2,9 +2,11 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -12,6 +14,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -27,11 +30,15 @@ import { Roles } from '../common/decorators/roles.decorator.js';
 import { ProblemDetailsDto } from '../common/dto/problem-details.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
-import { ItemNotFoundError } from './domain/item-errors.js';
+import { ProblemType } from '../common/http/problem-details.js';
+import { ProblemException } from '../common/http/problem.exception.js';
+import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
 import { CreateItemDto } from './dto/create-item.dto.js';
 import { ItemResponseDto, toItemResponse } from './dto/item-response.dto.js';
 import { ListItemsQueryDto } from './dto/list-items-query.dto.js';
+import { UpdateItemDto, toItemPatch } from './dto/update-item.dto.js';
 import { ItemsService } from './items.service.js';
+import { ItemVersionConflictError } from './ports/item.repository.js';
 
 @ApiTags('Items')
 @ApiBearerAuth('access-token')
@@ -136,9 +143,99 @@ export class ItemsController {
     try {
       return toItemResponse(await this.items.findById(id));
     } catch (error) {
-      // El servicio no conoce codigos HTTP: la traduccion vive aqui, en el adaptador.
-      if (error instanceof ItemNotFoundError) throw new NotFoundException(error.message);
-      throw error;
+      throw this.asHttp(error);
     }
+  }
+
+  @Patch(':id')
+  @Roles(Role.STAFF)
+  @ApiOperation({
+    summary: 'Editar un objeto registrado',
+    description: [
+      'Cambia los datos de un objeto del catalogo. Operacion de funcionario.',
+      '',
+      '**Hay que enviar `version`**, la que vino en el `GET`. El servicio escribe solo si',
+      'esa version sigue siendo la vigente, y responde `409` si no lo es. Sin ese control,',
+      'dos funcionarios editando la misma ficha a la vez se pisarian en silencio y el',
+      'segundo en guardar borraria el cambio del primero.',
+      '',
+      'Cada campo ausente se deja como estaba. Cada escritura aceptada incrementa la',
+      'version y registra quien la hizo y cuando.',
+      '',
+      'Sobre `status`: solo se admite retirar y reponer. Los demas estados los mueven la',
+      'creacion de lotes, la programacion de la sala y la adjudicacion, nunca este',
+      'formulario.',
+    ].join('\n'),
+  })
+  @ApiOkResponse({
+    description: 'El objeto despues del cambio, con la version ya incrementada.',
+    type: ItemResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Falta `version` o algun campo no cumple el contrato.',
+    type: ProblemDetailsDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'La sesion es valida pero el rol no administra el catalogo.',
+    type: ProblemDetailsDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'No existe un objeto con ese identificador.',
+    type: ProblemDetailsDto,
+  })
+  @ApiConflictResponse({
+    description: [
+      'Dos motivos distintos, separados por el campo `type`:',
+      '',
+      '- `conflicto-de-version`: otra persona edito el objeto despues de que tu lo leyeras.',
+      '  Vuelve a cargarlo, revisa el cambio ajeno y reintenta.',
+      '- `transicion-invalida`: el estado que pediste no se puede escribir a mano.',
+    ].join('\n'),
+    type: ProblemDetailsDto,
+  })
+  async update(
+    @CurrentUser() principal: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateItemDto,
+  ): Promise<ItemResponseDto> {
+    try {
+      const item = await this.items.update({
+        id,
+        expectedVersion: body.version,
+        patch: toItemPatch(body),
+        lastModifiedBy: principal.userId,
+      });
+      return toItemResponse(item);
+    } catch (error) {
+      throw this.asHttp(error);
+    }
+  }
+
+  /**
+   * Traduce los errores de dominio a HTTP. El servicio no conoce codigos de estado: esa
+   * decision es del adaptador, y tenerla en un solo sitio evita que dos endpoints
+   * respondan distinto ante el mismo fallo.
+   */
+  private asHttp(error: unknown): unknown {
+    if (error instanceof ItemNotFoundError) {
+      return new NotFoundException(error.message);
+    }
+    if (error instanceof ItemVersionConflictError) {
+      return new ProblemException(
+        HttpStatus.CONFLICT,
+        ProblemType.VERSION_CONFLICT,
+        'El objeto cambio desde que lo leiste',
+        error.message,
+      );
+    }
+    if (error instanceof InvalidStatusTransitionError) {
+      return new ProblemException(
+        HttpStatus.CONFLICT,
+        ProblemType.INVALID_TRANSITION,
+        'Ese cambio de estado no se hace desde el catalogo',
+        error.message,
+      );
+    }
+    return error;
   }
 }

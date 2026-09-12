@@ -6,7 +6,6 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ItemsModule } from './items/items.module.js';
 import { LotsModule } from './lots/lots.module.js';
-import { ItemPatchModule } from './item-patch/item-patch.module.js';
 import { MediaAssetModule } from './media-asset/media-asset.module.js';
 
 @Module({
@@ -17,7 +16,6 @@ import { MediaAssetModule } from './media-asset/media-asset.module.js';
     AuthModule,
     ItemsModule,
     LotsModule,
-    ItemPatchModule,
     MediaAssetModule,
   ],
   controllers: [AppController],

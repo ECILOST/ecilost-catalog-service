@@ -51,6 +51,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const body = exception.getResponse();
 
+    // Una ProblemException ya trae su tipo y su titulo: se respetan tal cual.
+    if (isExplicitProblem(body)) {
+      return { ...body, status, instance };
+    }
+
     // ValidationPipe entrega un arreglo de mensajes, uno por regla incumplida. Se publican
     // tal cual porque el criterio de HU-03 exige decir cual campo falta.
     const messages = extractMessages(body);
@@ -77,6 +82,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         : {}),
     };
   }
+}
+
+function isExplicitProblem(body: unknown): body is ProblemDetails {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    typeof (body as { type?: unknown }).type === 'string' &&
+    typeof (body as { title?: unknown }).title === 'string'
+  );
 }
 
 function extractMessages(body: unknown): string[] {
