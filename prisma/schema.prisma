@@ -1,0 +1,14 @@
+// Esquema de ecilost-catalog-service.
+// Regla del proyecto: un motor relacional, un esquema por servicio, sin joins cruzados.
+// El schema `catalog` viaja en el parametro ?schema= de DATABASE_URL (ver prisma.config.ts).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

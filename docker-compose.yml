@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ecilost-catalog-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecilost
+      POSTGRES_PASSWORD: ecilost
+      POSTGRES_DB: ecilost_catalog
+    ports:
+      - '5434:5432'
+    volumes:
+      - ecilost-catalog-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ecilost -d ecilost_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ecilost-catalog-pgdata:
