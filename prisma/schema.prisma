@@ -12,3 +12,54 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+/// Estado del objeto dentro del ciclo del catalogo. Lo mueve el sistema, no el funcionario:
+/// nace AVAILABLE y cambia al entrar a un lote, a una ronda o al venderse.
+enum ItemStatus {
+  AVAILABLE
+  IN_LOT
+  IN_ROUND
+  SOLD
+  WITHDRAWN
+}
+
+/// Condicion fisica del objeto. La declara el funcionario al registrarlo y es lo que el
+/// estudiante consulta antes de pujar (HU-08).
+enum ItemCondition {
+  NEW
+  GOOD
+  FAIR
+  DAMAGED
+}
+
+/// Objeto perdido no reclamado, listo para subastarse (HU-03, HU-04).
+model Item {
+  id          String        @id @default(uuid())
+  name        String
+  description String
+  condition   ItemCondition
+  category    String
+  status      ItemStatus    @default(AVAILABLE)
+
+  /// Lote y ronda que ocupan el objeto. Nulos mientras esta libre.
+  /// Son identificadores planos, sin clave foranea: Lot llega con la HU-05 y la ronda
+  /// vive en auction-service, al otro lado de la frontera del servicio.
+  lotId   String?
+  roundId String?
+
+  /// Version para el bloqueo optimista de la HU-04. Cada escritura aceptada la incrementa;
+  /// una actualizacion que llega con una version vieja no encuentra fila y falla.
+  version Int @default(0)
+
+  /// Quien registro y quien modifico por ultima vez. Son el `userId` que emite
+  /// ecilost-auth-service. Sin clave foranea a proposito: las identidades viven en otro
+  /// esquema y la regla del proyecto prohibe los joins cruzados.
+  registeredBy   String
+  registeredAt   DateTime @default(now())
+  lastModifiedBy String
+  lastModifiedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@map("items")
+}
