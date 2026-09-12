@@ -20,6 +20,7 @@ import { ITEM_REPOSITORY } from '../src/items/ports/item.repository.js';
 import { MAX_PHOTOS_PER_ITEM } from '../src/media-asset/domain/media-policy.js';
 import { MEDIA_ASSET_REPOSITORY } from '../src/media-asset/ports/media-asset.repository.js';
 import { MEDIA_STORAGE } from '../src/media-asset/ports/media-storage.js';
+import { CachingMediaStorage } from '../src/media-asset/storage/caching-media-storage.js';
 import {
   FakeMediaAssetRepository,
   FakeMediaStorage,
@@ -75,7 +76,9 @@ describe('Multimedia del objeto (e2e)', () => {
       .overrideProvider(MEDIA_ASSET_REPOSITORY)
       .useValue(assets)
       .overrideProvider(MEDIA_STORAGE)
-      .useValue(storage)
+      // Misma composicion que arma el modulo en produccion: el almacen detras de la cache
+      // de enlaces. Las aserciones sobre archivos siguen mirando el doble del fondo.
+      .useValue(new CachingMediaStorage(storage))
       .overrideGuard(JwtAuthGuard)
       .useClass(StubAuthGuard)
       .compile();

@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -25,6 +26,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { Role } from '../auth/domain/role.enum.js';
 import type { Principal } from '../auth/domain/principal.js';
@@ -45,8 +47,10 @@ import { CreateItemDto } from './dto/create-item.dto.js';
 import { DeleteItemQueryDto } from './dto/delete-item-query.dto.js';
 import {
   ItemDetailResponseDto,
+  ItemFichaResponseDto,
   ItemResponseDto,
   toItemDetailResponse,
+  toItemFichaResponse,
   toItemResponse,
 } from './dto/item-response.dto.js';
 import { ListItemsQueryDto } from './dto/list-items-query.dto.js';
@@ -144,22 +148,36 @@ export class ItemsController {
   @ApiOperation({
     summary: 'Consultar un objeto',
     description: [
-      'Ficha completa del objeto: sus datos, sus fotografias y su video.',
+      'Ficha del objeto: sus datos, sus fotografias y su video.',
       '',
-      'Incluye `version`, que hay que devolver al editarlo para que el servicio detecte si',
-      'alguien lo modifico entre medias.',
+      '**La respuesta depende del rol.** El funcionario recibe la ficha completa, con',
+      '`version`, que hay que devolverle al editar para que el servicio detecte si alguien',
+      'lo modifico entre medias, y con el rastro de quien lo registro y lo cambio. El',
+      'estudiante recibe la ficha de inspeccion (HU-08), que es la misma sin esos cuatro',
+      'campos: identifican a funcionarios concretos y no le sirven para decidir si pujar.',
       '',
       'La multimedia viaja aqui y no en un recurso aparte para que abrir una ficha sea una',
       'sola peticion. `photos` puede venir vacio y `video` puede venir en `null`, pero',
       'ninguno de los dos campos falta nunca: un objeto sin video se renderiza igual de',
       'bien que uno con video.',
       '',
-      'Los enlaces de cada pieza son de vida corta y apuntan al almacen, no a este',
-      'servicio. El navegador baja los archivos directamente, de modo que varios',
-      'estudiantes abriendo la misma ficha no compiten por este proceso.',
+      'Los enlaces de cada pieza apuntan al almacen, no a este servicio, asi que el',
+      'navegador baja los archivos directamente. Son estables mientras siguen vigentes: dos',
+      'estudiantes que abren la misma ficha reciben el mismo enlace, y volver a abrirla no',
+      'obliga al navegador a descargar el video de nuevo.',
     ].join('\n'),
   })
-  @ApiOkResponse({ description: 'El objeto solicitado.', type: ItemDetailResponseDto })
+  @ApiExtraModels(ItemDetailResponseDto, ItemFichaResponseDto)
+  @ApiOkResponse({
+    description:
+      'La ficha completa si quien pregunta es `STAFF`, y la de inspeccion si es `STUDENT`.',
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(ItemDetailResponseDto) },
+        { $ref: getSchemaPath(ItemFichaResponseDto) },
+      ],
+    },
+  })
   @ApiNotFoundResponse({
     description: 'No existe un objeto con ese identificador.',
     type: ProblemDetailsDto,
@@ -168,12 +186,20 @@ export class ItemsController {
     description: 'El identificador no tiene forma de UUID.',
     type: ProblemDetailsDto,
   })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ItemDetailResponseDto> {
+  async findOne(
+    @CurrentUser() principal: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ItemDetailResponseDto | ItemFichaResponseDto> {
     try {
       const item = await this.items.findById(id);
       // Se pide despues de confirmar que el objeto existe: firmar las URL de una ficha que
       // va a responder 404 seria trabajo tirado.
-      return toItemDetailResponse(item, await this.media.findByItem(id));
+      const completa = toItemDetailResponse(item, await this.media.findByItem(id));
+
+      // El recorte va al final y no en la consulta: lo que cambia entre un rol y otro es
+      // que se publica, no que se lee. Repartir esa decision entre el servicio y el
+      // repositorio dejaria dos sitios donde equivocarse.
+      return principal.canManageCatalog() ? completa : toItemFichaResponse(completa);
     } catch (error) {
       throw this.asHttp(error);
     }

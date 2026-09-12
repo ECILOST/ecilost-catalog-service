@@ -16,7 +16,10 @@ import { ItemsModule } from '../src/items/items.module.js';
 import { ITEM_REPOSITORY } from '../src/items/ports/item.repository.js';
 import { MEDIA_ASSET_REPOSITORY } from '../src/media-asset/ports/media-asset.repository.js';
 import { MEDIA_STORAGE } from '../src/media-asset/ports/media-storage.js';
-import { FakeMediaAssetRepository, FakeMediaStorage } from './helpers/fake-media.js';
+import {
+  almacenComoEnProduccion,
+  FakeMediaAssetRepository,
+} from './helpers/fake-media.js';
 import { FakeItemRepository } from './helpers/fake-repositories.js';
 
 const FUNCIONARIO = new Principal('11111111-1111-4111-8111-111111111111', 'STAFF');
@@ -66,7 +69,7 @@ describe('Items (e2e)', () => {
       .overrideProvider(MEDIA_ASSET_REPOSITORY)
       .useValue(new FakeMediaAssetRepository(repository))
       .overrideProvider(MEDIA_STORAGE)
-      .useValue(new FakeMediaStorage())
+      .useValue(almacenComoEnProduccion())
       .overrideGuard(JwtAuthGuard)
       .useClass(StubAuthGuard)
       .compile();

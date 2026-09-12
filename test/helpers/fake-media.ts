@@ -7,6 +7,7 @@ import {
   type MediaAssetRepository,
 } from '../../src/media-asset/ports/media-asset.repository.js';
 import type { MediaStorage } from '../../src/media-asset/ports/media-storage.js';
+import { CachingMediaStorage } from '../../src/media-asset/storage/caching-media-storage.js';
 import type { FakeItemRepository } from './fake-repositories.js';
 
 /**
@@ -78,15 +79,21 @@ export class FakeMediaAssetRepository implements MediaAssetRepository {
 }
 
 /**
- * Doble en memoria del almacen de objetos. Guarda los bytes en un mapa y devuelve una URL
- * inventada pero reconocible, para poder afirmar en las pruebas que la ficha entrega un
- * enlace por pieza sin levantar MinIO.
+ * Doble en memoria del almacen de objetos. Guarda los bytes en un mapa para poder afirmar
+ * en las pruebas que la subida y el borrado llegan al almacen, sin levantar MinIO.
+ *
+ * Firma distinto en cada llamada, igual que S3: una firma real lleva dentro el instante en
+ * que se produjo. Reproducirlo importa, porque es lo que hace que la estabilidad del enlace
+ * sea una propiedad demostrada de CachingMediaStorage y no una casualidad del doble.
  */
 export class FakeMediaStorage implements MediaStorage {
   readonly objects = new Map<
     string,
     { content: Buffer; contentType: string }
   >();
+
+  /** Cuantas veces se ha firmado. Sube en cada llamada, como el reloj de una firma real. */
+  firmas = 0;
 
   /** Se puede encender para comprobar que un fallo de limpieza no tumba la operacion. */
   failOnRemove = false;
@@ -101,6 +108,16 @@ export class FakeMediaStorage implements MediaStorage {
   }
 
   async signedReadUrl(key: string, ttlSeconds: number): Promise<string> {
-    return `https://almacen.test/${key}?expira=${ttlSeconds}`;
+    this.firmas += 1;
+    return `https://almacen.test/${key}?firma=${this.firmas}&expira=${ttlSeconds}`;
   }
+}
+
+/**
+ * El almacen tal como lo arma el modulo en produccion: el adaptador real detras de la
+ * cache de enlaces. Las pruebas de extremo a extremo lo usan para ejercitar la misma
+ * composicion que corre de verdad, con un doble solo en el fondo.
+ */
+export function almacenComoEnProduccion(): CachingMediaStorage {
+  return new CachingMediaStorage(new FakeMediaStorage());
 }

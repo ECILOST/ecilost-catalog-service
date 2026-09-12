@@ -256,7 +256,7 @@ describe('MediaAssetService', () => {
       expect(ficha.video).toBeNull();
     });
 
-    it('varias lecturas simultaneas devuelven todas el mismo contenido', async () => {
+    it('varias lecturas simultaneas devuelven todas las mismas piezas', async () => {
       await subir(jpeg());
       await subir(png());
       await subir(mp4());
@@ -265,9 +265,18 @@ describe('MediaAssetService', () => {
         Array.from({ length: 20 }, () => service.findByItem(objeto.id)),
       );
 
-      const referencia = JSON.stringify(fichas[0]);
-      for (const ficha of fichas)
-        expect(JSON.stringify(ficha)).toBe(referencia);
+      // El servicio no guarda estado entre peticiones, asi que veinte lecturas a la vez no
+      // se estorban. Se comparan las piezas y no la respuesta entera porque el enlace lo
+      // firma el almacen: que ademas sea identico entre lectores es cosa de
+      // CachingMediaStorage, que tiene su propia prueba.
+      const piezas = (f: (typeof fichas)[number]) => [
+        ...f.photos.map((p) => `${p.id}:${p.position}`),
+        f.video?.id ?? 'sin-video',
+      ];
+
+      const referencia = piezas(fichas[0]);
+      expect(referencia).toHaveLength(3);
+      for (const ficha of fichas) expect(piezas(ficha)).toEqual(referencia);
     });
   });
 });
