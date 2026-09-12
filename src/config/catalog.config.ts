@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, validateSync } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUrl, validateSync } from 'class-validator';
 
 /**
  * Contrato de entorno del servicio. Se valida al arrancar, no en la primera peticion:
@@ -12,6 +12,13 @@ export class EnvironmentVariables {
   @IsNotEmpty({ message: 'DATABASE_URL es obligatorio' })
   @IsString()
   DATABASE_URL: string;
+
+  /** JWKS de ecilost-auth-service. Se descarga una vez y se cachea. */
+  @IsUrl({ require_tld: false }) AUTH_JWKS_URL: string;
+
+  /** Deben coincidir con los del emisor, o ningun token verificara. */
+  @IsNotEmpty() @IsString() JWT_ISSUER: string;
+  @IsNotEmpty() @IsString() JWT_AUDIENCE: string;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables {
@@ -33,10 +40,16 @@ export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables 
 export class CatalogConfig {
   readonly databaseUrl: string;
   readonly databaseSchema: string;
+  readonly authJwksUrl: string;
+  readonly jwtIssuer: string;
+  readonly jwtAudience: string;
 
   constructor(env: EnvironmentVariables) {
     this.databaseUrl = env.DATABASE_URL;
     this.databaseSchema = readSchemaFromUrl(env.DATABASE_URL);
+    this.authJwksUrl = env.AUTH_JWKS_URL;
+    this.jwtIssuer = env.JWT_ISSUER;
+    this.jwtAudience = env.JWT_AUDIENCE;
   }
 }
 
