@@ -365,4 +365,106 @@ describe('Items (e2e)', () => {
       expect(status).toBe(400);
     });
   });
+
+  describe('DELETE /items/:id — HU-04', () => {
+    it('borra un objeto libre y responde 204 sin cuerpo', async () => {
+      const item = repository.seed();
+
+      const { status, text } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(204);
+      expect(text).toBe('');
+      expect(repository.rows.has(item.id)).toBe(false);
+    });
+
+    it('el objeto borrado ya no aparece en el catalogo', async () => {
+      const item = repository.seed();
+      await request(app.getHttpServer()).delete(`/items/${item.id}?version=0`);
+
+      const { body } = await request(app.getHttpServer()).get('/items');
+
+      expect(body).toEqual([]);
+    });
+
+    it('un objeto en ronda responde 409 e indica cual la bloquea', async () => {
+      const item = repository.seed({ status: 'IN_ROUND', roundId: 'ronda-42' });
+
+      const { body, status, headers } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(409);
+      expect(headers['content-type']).toContain('application/problem+json');
+      expect(body.type).toContain('objeto-comprometido');
+      expect(body.detail).toContain('ronda-42');
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+
+    it('un objeto en lote tambien responde 409', async () => {
+      const item = repository.seed({ status: 'IN_LOT', lotId: 'lote-7' });
+
+      const { body, status } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(409);
+      expect(body.detail).toContain('lote-7');
+    });
+
+    it('un objeto vendido responde 409', async () => {
+      const item = repository.seed({ status: 'SOLD' });
+
+      const { status } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(409);
+    });
+
+    it('una version vieja responde 409 de conflicto, no de compromiso', async () => {
+      const item = repository.seed();
+      await request(app.getHttpServer())
+        .patch(`/items/${item.id}`)
+        .send({ version: 0, name: 'Editado' });
+
+      const { body, status } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(409);
+      expect(body.type).toContain('conflicto-de-version');
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+
+    it('sin version en la consulta responde 400', async () => {
+      const item = repository.seed();
+
+      const { body, status } = await request(app.getHttpServer()).delete(`/items/${item.id}`);
+
+      expect(status).toBe(400);
+      expect(JSON.stringify(body)).toContain('version');
+    });
+
+    it('un objeto inexistente responde 404', async () => {
+      const { status } = await request(app.getHttpServer()).delete(
+        '/items/33333333-3333-4333-8333-333333333333?version=0',
+      );
+
+      expect(status).toBe(404);
+    });
+
+    it('el estudiante recibe 403 y el objeto sigue ahi', async () => {
+      const item = repository.seed();
+      actor = ESTUDIANTE;
+
+      const { status } = await request(app.getHttpServer()).delete(
+        `/items/${item.id}?version=0`,
+      );
+
+      expect(status).toBe(403);
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+  });
 });

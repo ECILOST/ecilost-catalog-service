@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeItemRepository } from '../../test/helpers/fake-repositories.js';
-import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
+import {
+  InvalidStatusTransitionError,
+  ItemInUseError,
+  ItemNotFoundError,
+} from './domain/item-errors.js';
 import { ItemsService } from './items.service.js';
 import { DEFAULT_PAGE_SIZE } from './dto/list-items-query.dto.js';
 import {
@@ -308,6 +312,74 @@ describe('ItemsService', () => {
 
         expect(actualizado.status).toBe('IN_ROUND');
       });
+    });
+  });
+
+  describe('remove (HU-04)', () => {
+    it('borra un objeto libre y desaparece del catalogo', async () => {
+      const item = repository.seed();
+
+      await service.remove(item.id, 0);
+
+      expect(repository.rows.has(item.id)).toBe(false);
+      await expect(service.findAll(TODO)).resolves.toEqual([]);
+    });
+
+    it('impide borrar un objeto en ronda e indica cual la bloquea', async () => {
+      const item = repository.seed({ status: 'IN_ROUND', roundId: 'ronda-42' });
+
+      const error = await service.remove(item.id, 0).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ItemInUseError);
+      expect((error as ItemInUseError).blocker).toEqual({
+        reason: 'IN_ROUND',
+        roundId: 'ronda-42',
+      });
+      expect((error as ItemInUseError).message).toContain('ronda-42');
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+
+    it('impide borrar un objeto que pertenece a un lote', async () => {
+      const item = repository.seed({ status: 'IN_LOT', lotId: 'lote-7' });
+
+      await expect(service.remove(item.id, 0)).rejects.toBeInstanceOf(ItemInUseError);
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+
+    it('impide borrar un objeto vendido', async () => {
+      // Su historial es evidencia de una adjudicacion.
+      const item = repository.seed({ status: 'SOLD' });
+
+      await expect(service.remove(item.id, 0)).rejects.toBeInstanceOf(ItemInUseError);
+    });
+
+    it('rechaza una version ya superada', async () => {
+      const item = repository.seed();
+      await service.update({
+        id: item.id,
+        expectedVersion: 0,
+        patch: { name: 'Editado' },
+        lastModifiedBy: FUNCIONARIO,
+      });
+
+      await expect(service.remove(item.id, 0)).rejects.toBeInstanceOf(
+        ItemVersionConflictError,
+      );
+      expect(repository.rows.has(item.id)).toBe(true);
+    });
+
+    it('lanza no encontrado cuando el objeto no existe', async () => {
+      await expect(
+        service.remove('33333333-3333-4333-8333-333333333333', 0),
+      ).rejects.toBeInstanceOf(ItemNotFoundError);
+    });
+
+    it('un objeto retirado del catalogo si se puede borrar', async () => {
+      const item = repository.seed({ status: 'WITHDRAWN' });
+
+      await service.remove(item.id, 0);
+
+      expect(repository.rows.has(item.id)).toBe(false);
     });
   });
 });

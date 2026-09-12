@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { canStaffTransition, type Item } from './entities/item.entity.js';
-import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
+import { canStaffTransition, deletionBlocker, type Item } from './entities/item.entity.js';
+import {
+  InvalidStatusTransitionError,
+  ItemInUseError,
+  ItemNotFoundError,
+} from './domain/item-errors.js';
 import {
   ITEM_REPOSITORY,
   ItemVersionConflictError,
@@ -71,6 +75,35 @@ export class ItemsService {
       if (error instanceof ItemVersionConflictError) await this.requireById(input.id);
       throw error;
     }
+  }
+
+  /**
+   * HU-04: borra un objeto que no este comprometido.
+   *
+   * Hay dos lecturas alrededor de la escritura y no son el antipatron de comprobar antes
+   * de actuar: la garantia vive en el WHERE del DELETE, que exige version, lote nulo y
+   * ronda nula. Las lecturas solo eligen que mensaje de error dar.
+   */
+  async remove(id: string, expectedVersion: number): Promise<void> {
+    // Lectura previa: sirve para decir QUE lo bloquea, que es lo que pide el criterio.
+    const item = await this.requireById(id);
+    const blocker = deletionBlocker(item);
+    if (blocker) throw new ItemInUseError(blocker);
+
+    const deleted = await this.items.delete(id, expectedVersion);
+    if (deleted) {
+      this.logger.log(`Objeto ${id} borrado`);
+      return;
+    }
+
+    // Cero filas borradas. O la version cambio, o el objeto entro a una ronda justo entre
+    // la lectura de arriba y este borrado. Esa ventana existe y no se cierra leyendo mas
+    // rapido: se cierra porque las condiciones viajan en el WHERE. Se relee solo para
+    // decidir cual de los dos motivos reportar.
+    const current = await this.requireById(id);
+    const late = deletionBlocker(current);
+    if (late) throw new ItemInUseError(late);
+    throw new ItemVersionConflictError(id);
   }
 
   private async requireById(id: string): Promise<Item> {

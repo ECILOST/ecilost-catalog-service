@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   HttpStatus,
   NotFoundException,
   Param,
@@ -17,6 +19,7 @@ import {
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -32,8 +35,13 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { ProblemType } from '../common/http/problem-details.js';
 import { ProblemException } from '../common/http/problem.exception.js';
-import { InvalidStatusTransitionError, ItemNotFoundError } from './domain/item-errors.js';
+import {
+  InvalidStatusTransitionError,
+  ItemInUseError,
+  ItemNotFoundError,
+} from './domain/item-errors.js';
 import { CreateItemDto } from './dto/create-item.dto.js';
+import { DeleteItemQueryDto } from './dto/delete-item-query.dto.js';
 import { ItemResponseDto, toItemResponse } from './dto/item-response.dto.js';
 import { ListItemsQueryDto } from './dto/list-items-query.dto.js';
 import { UpdateItemDto, toItemPatch } from './dto/update-item.dto.js';
@@ -211,6 +219,59 @@ export class ItemsController {
     }
   }
 
+  @Delete(':id')
+  @Roles(Role.STAFF)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Borrar un objeto del catalogo',
+    description: [
+      'Elimina un objeto que no este comprometido. Operacion de funcionario.',
+      '',
+      '**Hay que enviar `version`** en la consulta, la que vino en el `GET`.',
+      '',
+      'Un objeto asignado a una ronda no se borra: la respuesta `409` nombra la ronda que',
+      'lo retiene. Lo mismo vale para uno que pertenece a un lote, y para uno ya vendido,',
+      'cuyo historial debe conservarse.',
+      '',
+      'La condicion se evalua dentro de la propia sentencia de borrado, no antes: si el',
+      'objeto entra a una ronda en ese instante, el borrado no encuentra fila y falla, en',
+      'lugar de dejar la ronda apuntando a algo que ya no existe.',
+    ].join('\n'),
+  })
+  @ApiNoContentResponse({ description: 'El objeto se elimino del catalogo.' })
+  @ApiBadRequestResponse({
+    description: 'Falta `version` en la consulta, o el identificador no es un UUID.',
+    type: ProblemDetailsDto,
+  })
+  @ApiForbiddenResponse({
+    description: 'La sesion es valida pero el rol no administra el catalogo.',
+    type: ProblemDetailsDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'No existe un objeto con ese identificador.',
+    type: ProblemDetailsDto,
+  })
+  @ApiConflictResponse({
+    description: [
+      'Dos motivos distintos, separados por el campo `type`:',
+      '',
+      '- `objeto-comprometido`: esta en una ronda, en un lote, o ya fue vendido. El campo',
+      '  `detail` dice cual.',
+      '- `conflicto-de-version`: otra persona lo edito despues de que tu lo leyeras.',
+    ].join('\n'),
+    type: ProblemDetailsDto,
+  })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: DeleteItemQueryDto,
+  ): Promise<void> {
+    try {
+      await this.items.remove(id, query.version);
+    } catch (error) {
+      throw this.asHttp(error);
+    }
+  }
+
   /**
    * Traduce los errores de dominio a HTTP. El servicio no conoce codigos de estado: esa
    * decision es del adaptador, y tenerla en un solo sitio evita que dos endpoints
@@ -219,6 +280,14 @@ export class ItemsController {
   private asHttp(error: unknown): unknown {
     if (error instanceof ItemNotFoundError) {
       return new NotFoundException(error.message);
+    }
+    if (error instanceof ItemInUseError) {
+      return new ProblemException(
+        HttpStatus.CONFLICT,
+        ProblemType.ITEM_IN_USE,
+        'El objeto esta comprometido',
+        error.message,
+      );
     }
     if (error instanceof ItemVersionConflictError) {
       return new ProblemException(
