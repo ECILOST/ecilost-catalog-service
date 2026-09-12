@@ -1,0 +1,241 @@
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+  type CanActivate,
+  type ExecutionContext,
+} from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Principal } from '../src/auth/domain/principal.js';
+import { ProblemDetailsFilter } from '../src/common/filters/problem-details.filter.js';
+import { JwtAuthGuard, type RequestWithPrincipal } from '../src/common/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../src/common/guards/roles.guard.js';
+import { ItemsModule } from '../src/items/items.module.js';
+import { ITEM_REPOSITORY } from '../src/items/ports/item.repository.js';
+import { FakeItemRepository } from './helpers/fake-repositories.js';
+
+const FUNCIONARIO = new Principal('11111111-1111-4111-8111-111111111111', 'STAFF');
+const ESTUDIANTE = new Principal('22222222-2222-4222-8222-222222222222', 'STUDENT');
+
+const ALTA_VALIDA = {
+  name: 'Portatil Lenovo ThinkPad',
+  description: 'Carcasa negra con una calcomania de la universidad en la tapa.',
+  condition: 'GOOD',
+  category: 'Electronica',
+};
+
+/** Quien va firmando las peticiones. `null` simula una peticion sin sesion. */
+let actor: Principal | null = FUNCIONARIO;
+
+/**
+ * Sustituye a JwtAuthGuard para no depender de un auth-service vivo. La verificacion real
+ * del JWT ya la cubre token-verifier.spec.ts; aqui interesa lo que hay despues del guard.
+ * RolesGuard es el de verdad, asi que la regla de rol si se ejerce.
+ */
+class StubAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    if (!actor) throw new UnauthorizedException('Falta el token de acceso.');
+    context.switchToHttp().getRequest<RequestWithPrincipal>().principal = actor;
+    return true;
+  }
+}
+
+describe('Items (e2e)', () => {
+  let app: INestApplication;
+  let repository: FakeItemRepository;
+
+  beforeEach(async () => {
+    actor = FUNCIONARIO;
+    repository = new FakeItemRepository();
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [ItemsModule],
+      providers: [RolesGuard],
+    })
+      .overrideProvider(ITEM_REPOSITORY)
+      .useValue(repository)
+      .overrideGuard(JwtAuthGuard)
+      .useClass(StubAuthGuard)
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    // Mismo cableado que main.ts: sin esto no se validarian los DTO ni saldria problem+json.
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
+    app.useGlobalFilters(new ProblemDetailsFilter());
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  describe('POST /items — criterio 1', () => {
+    it('el funcionario registra el objeto y queda Disponible, sin sala', async () => {
+      const { body, status } = await request(app.getHttpServer())
+        .post('/items')
+        .send(ALTA_VALIDA);
+
+      expect(status).toBe(201);
+      expect(body).toMatchObject({
+        name: ALTA_VALIDA.name,
+        category: ALTA_VALIDA.category,
+        condition: 'GOOD',
+        status: 'AVAILABLE',
+        roundId: null,
+        lotId: null,
+        version: 0,
+      });
+      expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    it('registra al funcionario de la sesion como autor', async () => {
+      const { body } = await request(app.getHttpServer()).post('/items').send(ALTA_VALIDA);
+
+      expect(body.registeredBy).toBe(FUNCIONARIO.userId);
+      expect(body.lastModifiedBy).toBe(FUNCIONARIO.userId);
+    });
+  });
+
+  describe('POST /items — criterio 2: rechaza e indica cual campo falta', () => {
+    it.each([['name'], ['description'], ['condition'], ['category']])(
+      'sin %s responde 400 nombrando el campo',
+      async (campo) => {
+        const incompleto = { ...ALTA_VALIDA };
+        delete (incompleto as Record<string, unknown>)[campo];
+
+        const { body, status, headers } = await request(app.getHttpServer())
+          .post('/items')
+          .send(incompleto);
+
+        expect(status).toBe(400);
+        expect(headers['content-type']).toContain('application/problem+json');
+        expect(JSON.stringify(body.errors)).toContain(campo);
+        expect(repository.rows.size).toBe(0);
+      },
+    );
+
+    it('rechaza una condicion que no esta en el catalogo de valores', async () => {
+      const { body, status } = await request(app.getHttpServer())
+        .post('/items')
+        .send({ ...ALTA_VALIDA, condition: 'EXCELENTE' });
+
+      expect(status).toBe(400);
+      expect(JSON.stringify(body)).toContain('condition');
+    });
+
+    it('rechaza que el cliente escriba el estado', async () => {
+      // El objeto nace AVAILABLE. Aceptar `status` dejaria registrar algo ya vendido.
+      const { status } = await request(app.getHttpServer())
+        .post('/items')
+        .send({ ...ALTA_VALIDA, status: 'SOLD' });
+
+      expect(status).toBe(400);
+    });
+
+    it('rechaza campos desconocidos en vez de ignorarlos', async () => {
+      const { status } = await request(app.getHttpServer())
+        .post('/items')
+        .send({ ...ALTA_VALIDA, precioSecreto: 1 });
+
+      expect(status).toBe(400);
+    });
+  });
+
+  describe('POST /items — rol y sesion', () => {
+    it('el estudiante recibe 403 y no se registra nada', async () => {
+      actor = ESTUDIANTE;
+
+      const { body, status } = await request(app.getHttpServer())
+        .post('/items')
+        .send(ALTA_VALIDA);
+
+      expect(status).toBe(403);
+      expect(body.type).toContain('rol-insuficiente');
+      expect(repository.rows.size).toBe(0);
+    });
+
+    it('sin sesion responde 401', async () => {
+      actor = null;
+
+      const { status } = await request(app.getHttpServer()).post('/items').send(ALTA_VALIDA);
+
+      expect(status).toBe(401);
+    });
+  });
+
+  describe('GET /items — criterio 3', () => {
+    it('el objeto recien registrado aparece en el catalogo', async () => {
+      const creado = await request(app.getHttpServer()).post('/items').send(ALTA_VALIDA);
+
+      const { body, status } = await request(app.getHttpServer()).get('/items');
+
+      expect(status).toBe(200);
+      expect(body.map((i: { id: string }) => i.id)).toContain(creado.body.id);
+    });
+
+    it('el estudiante tambien puede consultar el catalogo', async () => {
+      // Cerrarlo a funcionarios dejaria la HU-08 bloqueada de nacimiento.
+      repository.seed();
+      actor = ESTUDIANTE;
+
+      const { status, body } = await request(app.getHttpServer()).get('/items');
+
+      expect(status).toBe(200);
+      expect(body).toHaveLength(1);
+    });
+
+    it('filtra por estado', async () => {
+      repository.seed({ status: 'AVAILABLE' });
+      repository.seed({ status: 'SOLD' });
+
+      const { body } = await request(app.getHttpServer()).get('/items?status=AVAILABLE');
+
+      expect(body).toHaveLength(1);
+      expect(body[0].status).toBe('AVAILABLE');
+    });
+
+    it('rechaza un tope de pagina fuera de rango', async () => {
+      const { status } = await request(app.getHttpServer()).get('/items?limit=5000');
+
+      expect(status).toBe(400);
+    });
+
+    it('devuelve una lista vacia cuando no hay nada', async () => {
+      const { body, status } = await request(app.getHttpServer()).get('/items');
+
+      expect(status).toBe(200);
+      expect(body).toEqual([]);
+    });
+  });
+
+  describe('GET /items/:id', () => {
+    it('devuelve la ficha con su version', async () => {
+      const sembrado = repository.seed();
+
+      const { body, status } = await request(app.getHttpServer()).get(`/items/${sembrado.id}`);
+
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ id: sembrado.id, version: 0 });
+    });
+
+    it('responde 404 en problem+json cuando no existe', async () => {
+      const { body, status, headers } = await request(app.getHttpServer()).get(
+        '/items/33333333-3333-4333-8333-333333333333',
+      );
+
+      expect(status).toBe(404);
+      expect(headers['content-type']).toContain('application/problem+json');
+      expect(body).toMatchObject({ status: 404, type: expect.stringContaining('/problems/') });
+    });
+
+    it('responde 400 si el identificador no tiene forma de UUID', async () => {
+      const { status } = await request(app.getHttpServer()).get('/items/no-es-uuid');
+
+      expect(status).toBe(400);
+    });
+  });
+});

@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
+import { ProblemDetailsFilter } from './common/filters/problem-details.filter.js';
 
 const API_DESCRIPTION = [
   'Catalogo de **ECI Lost & Auction**: los objetos perdidos no reclamados que la',
@@ -23,6 +24,10 @@ async function bootstrap() {
     }),
   );
 
+  // Global y no por controlador: asi un endpoint nuevo no puede responder otro formato
+  // de error por olvido.
+  app.useGlobalFilters(new ProblemDetailsFilter());
+
   setupSwagger(app);
 
   await app.listen(process.env.PORT ?? 3001);
@@ -35,6 +40,18 @@ function setupSwagger(app: Parameters<typeof SwaggerModule.createDocument>[0]): 
     .setVersion('1.0.0')
     .addTag('Items', 'Registro y administracion de objetos perdidos')
     .addTag('Health', 'Liveness')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description:
+          'Access token emitido por ecilost-auth-service en POST /auth/token. Se envia ' +
+          'como `Authorization: Bearer <token>`. Este servicio lo verifica en local ' +
+          'contra la JWKS del emisor.',
+      },
+      'access-token',
+    )
     .build();
 
   SwaggerModule.setup('docs', app, () =>
