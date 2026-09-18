@@ -32,6 +32,14 @@ enum ItemCondition {
   DAMAGED
 }
 
+enum LotStatus {
+  DRAFT
+  ACTIVE
+  IN_ROUND
+  CLOSED
+  CANCELLED
+}
+
 /// Objeto perdido no reclamado, listo para subastarse (HU-03, HU-04).
 model Item {
   id          String        @id @default(uuid())
@@ -45,6 +53,7 @@ model Item {
   /// Son identificadores planos, sin clave foranea: Lot llega con la HU-05 y la ronda
   /// vive en auction-service, al otro lado de la frontera del servicio.
   lotId   String?
+  lot     Lot?          @relation(fields: [lotId], references: [id], onDelete: Restrict)
   roundId String?
 
   /// Version para el bloqueo optimista de la HU-04. Cada escritura aceptada la incrementa;
@@ -62,4 +71,17 @@ model Item {
   @@index([status])
   @@index([category])
   @@map("items")
+}
+
+/// Agrupacion de dos o mas objetos para subastarlos conjuntamente (HU-05 y HU-06).
+model Lot {
+  id        String    @id @default(uuid())
+  name      String
+  status    LotStatus @default(ACTIVE)
+  createdBy String
+  createdAt DateTime  @default(now())
+  items     Item[]
+
+  @@index([status])
+  @@map("lots")
 }
