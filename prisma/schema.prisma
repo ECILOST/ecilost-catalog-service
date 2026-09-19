@@ -32,19 +32,18 @@ enum ItemCondition {
   DAMAGED
 }
 
-<<<<<<< HEAD
 enum LotStatus {
   DRAFT
   ACTIVE
   IN_ROUND
   CLOSED
   CANCELLED
-=======
+}
+
 /// Tipo de pieza multimedia. De fotografias hay varias; de video, a lo sumo una.
 enum MediaKind {
   PHOTO
   VIDEO
->>>>>>> 51c15bd4862833302295ea5280375e18e2c77f66
 }
 
 /// Objeto perdido no reclamado, listo para subastarse (HU-03, HU-04).
@@ -84,7 +83,6 @@ model Item {
   @@map("items")
 }
 
-<<<<<<< HEAD
 /// Agrupacion de dos o mas objetos para subastarlos conjuntamente (HU-05 y HU-06).
 model Lot {
   id        String    @id @default(uuid())
@@ -96,7 +94,8 @@ model Lot {
 
   @@index([status])
   @@map("lots")
-=======
+}
+
 /// Fotografia o video que documenta el estado real del objeto antes de publicarlo (HU-07),
 /// y que el estudiante inspecciona antes de pujar (HU-08).
 ///
@@ -137,5 +136,4 @@ model MediaAsset {
 
   @@index([itemId])
   @@map("media_assets")
->>>>>>> 51c15bd4862833302295ea5280375e18e2c77f66
 }
