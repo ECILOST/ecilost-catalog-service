@@ -32,12 +32,19 @@ enum ItemCondition {
   DAMAGED
 }
 
+<<<<<<< HEAD
 enum LotStatus {
   DRAFT
   ACTIVE
   IN_ROUND
   CLOSED
   CANCELLED
+=======
+/// Tipo de pieza multimedia. De fotografias hay varias; de video, a lo sumo una.
+enum MediaKind {
+  PHOTO
+  VIDEO
+>>>>>>> 51c15bd4862833302295ea5280375e18e2c77f66
 }
 
 /// Objeto perdido no reclamado, listo para subastarse (HU-03, HU-04).
@@ -68,11 +75,16 @@ model Item {
   lastModifiedBy String
   lastModifiedAt DateTime @updatedAt
 
+  /// Fotografias y video que documentan su estado real (HU-07). Se adjuntan contra el
+  /// objeto ya creado, asi que el alta de la HU-03 no los pide.
+  media MediaAsset[]
+
   @@index([status])
   @@index([category])
   @@map("items")
 }
 
+<<<<<<< HEAD
 /// Agrupacion de dos o mas objetos para subastarlos conjuntamente (HU-05 y HU-06).
 model Lot {
   id        String    @id @default(uuid())
@@ -84,4 +96,46 @@ model Lot {
 
   @@index([status])
   @@map("lots")
+=======
+/// Fotografia o video que documenta el estado real del objeto antes de publicarlo (HU-07),
+/// y que el estudiante inspecciona antes de pujar (HU-08).
+///
+/// Solo guarda la referencia: los bytes viven en el almacen de objetos. La URL de lectura
+/// no se persiste porque se firma al armar la ficha y caduca; guardarla obligaria a
+/// reescribir cada fila al rotar credenciales o al cambiar de almacen.
+/// LIMITACION CONOCIDA de la cascada: borrar un objeto (HU-04) elimina estas filas, pero
+/// no los archivos del almacen, que Postgres no conoce. Quedan huerfanos, invisibles desde
+/// cualquier ficha, y solo ocupan espacio. Cerrarlo pedira que el borrado del objeto retire
+/// tambien su multimedia, o un barrido periodico que compare el almacen contra esta tabla.
+model MediaAsset {
+  id     String    @id @default(uuid())
+  itemId String
+  item   Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  kind   MediaKind
+
+  /// Clave del objeto dentro del almacen. Unica: dos filas apuntando al mismo archivo
+  /// harian que borrar una dejara a la otra con la referencia rota.
+  storageKey  String @unique
+  contentType String
+  sizeBytes   Int
+
+  /// Orden dentro de la galeria de fotos. El video no lo usa.
+  position Int @default(0)
+
+  /// Lleva el `itemId` cuando la pieza es un video, y queda nulo cuando es una foto.
+  ///
+  /// Es lo que hace cumplir "a lo sumo un video por objeto" con una restriccion unica
+  /// corriente: en PostgreSQL los nulos no chocan entre si, asi que las fotos no se
+  /// estorban, y el segundo video del mismo objeto choca contra el indice. La alternativa,
+  /// contar los videos antes de insertar, dejaria pasar dos subidas simultaneas.
+  videoSlot String? @unique
+
+  /// userId del funcionario que la subio. Sin clave foranea: las identidades viven en el
+  /// esquema de auth-service y la regla del proyecto prohibe los joins cruzados.
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  @@index([itemId])
+  @@map("media_assets")
+>>>>>>> 51c15bd4862833302295ea5280375e18e2c77f66
 }
