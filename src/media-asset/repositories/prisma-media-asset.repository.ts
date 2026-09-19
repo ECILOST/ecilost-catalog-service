@@ -51,6 +51,23 @@ export class PrismaMediaAssetRepository implements MediaAssetRepository {
     });
   }
 
+  async findCovers(itemIds: string[]): Promise<Map<string, MediaAsset>> {
+    // Sin identificadores no hay nada que preguntar, y un `IN ()` vacio es una consulta
+    // que siempre devuelve nada: mejor no hacerla.
+    if (itemIds.length === 0) return new Map();
+
+    const covers = await this.prisma.mediaAsset.findMany({
+      where: { itemId: { in: itemIds }, kind: MediaKind.PHOTO },
+      // `distinct` sobre este orden deja la fotografia de menor posicion de cada objeto, en
+      // una sola consulta. Filtrar por `position: 0` seria mas corto y estaria mal: retirar
+      // una fotografia no renumera las demas, asi que la cero puede no existir.
+      orderBy: [{ itemId: 'asc' }, { position: 'asc' }],
+      distinct: ['itemId'],
+    });
+
+    return new Map(covers.map((cover) => [cover.itemId, cover]));
+  }
+
   countPhotos(itemId: string): Promise<number> {
     return this.prisma.mediaAsset.count({
       where: { itemId, kind: MediaKind.PHOTO },

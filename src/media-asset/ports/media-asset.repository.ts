@@ -55,6 +55,19 @@ export interface MediaAssetRepository {
   /** Toda la multimedia del objeto, para armar su ficha. */
   findByItem(itemId: string): Promise<MediaAsset[]>;
 
+  /**
+   * La primera fotografia de cada objeto pedido, en una sola consulta.
+   *
+   * Es para el listado del catalogo, que necesita N portadas a la vez. Pedirlas objeto por
+   * objeto convertiria una pagina de veinticuatro tarjetas en veinticuatro consultas, que
+   * es justamente lo que el listado evitaba no trayendo multimedia.
+   *
+   * "Primera" es la de posicion mas baja, no la de posicion cero: al retirar una fotografia
+   * las demas no se renumeran, asi que un objeto puede quedarse sin la cero y seguir
+   * teniendo fotografias. Los objetos sin ninguna no aparecen en el mapa.
+   */
+  findCovers(itemIds: string[]): Promise<Map<string, MediaAsset>>;
+
   countPhotos(itemId: string): Promise<number>;
 
   /**
