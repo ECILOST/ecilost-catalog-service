@@ -20,6 +20,7 @@ import {
   almacenComoEnProduccion,
   FakeMediaAssetRepository,
 } from './helpers/fake-media.js';
+import { jpeg, png } from './helpers/media-fixtures.js';
 import { FakeItemRepository } from './helpers/fake-repositories.js';
 
 const FUNCIONARIO = new Principal('11111111-1111-4111-8111-111111111111', 'STAFF');
@@ -189,6 +190,47 @@ describe('Items (e2e)', () => {
 
       expect(status).toBe(200);
       expect(body.map((i: { id: string }) => i.id)).toContain(creado.body.id);
+    });
+
+    it('cada fila trae la portada firmada, y nulo el objeto que no tiene fotografias', async () => {
+      const conFoto = await request(app.getHttpServer()).post('/items').send(ALTA_VALIDA);
+      const sinFoto = await request(app.getHttpServer())
+        .post('/items')
+        .send({ ...ALTA_VALIDA, name: 'Termo sin fotografias' });
+
+      await request(app.getHttpServer())
+        .post(`/items/${conFoto.body.id}/media`)
+        .attach('file', png(), 'frente.png')
+        .expect(201);
+
+      const { body } = await request(app.getHttpServer()).get('/items');
+      const fila = (id: string) => body.find((i: { id: string }) => i.id === id);
+
+      // El listado sigue sin traer la galeria: una sola imagen, para reconocer el objeto.
+      expect(fila(conFoto.body.id).coverUrl).toEqual(expect.stringContaining('http'));
+      expect(fila(conFoto.body.id).photos).toBeUndefined();
+      expect(fila(sinFoto.body.id).coverUrl).toBeNull();
+    });
+
+    it('la portada es la primera que queda, no la de posicion cero', async () => {
+      const creado = await request(app.getHttpServer()).post('/items').send(ALTA_VALIDA);
+      const primera = await request(app.getHttpServer())
+        .post(`/items/${creado.body.id}/media`)
+        .attach('file', png(), 'una.png');
+      await request(app.getHttpServer())
+        .post(`/items/${creado.body.id}/media`)
+        .attach('file', jpeg(), 'dos.jpg');
+
+      // Se retira la de posicion cero. Las demas NO se renumeran, asi que al objeto le
+      // quedan fotografias pero ninguna en esa posicion.
+      await request(app.getHttpServer())
+        .delete(`/items/${creado.body.id}/media/${primera.body.id}`)
+        .expect(204);
+
+      const { body } = await request(app.getHttpServer()).get('/items');
+      const fila = body.find((i: { id: string }) => i.id === creado.body.id);
+
+      expect(fila.coverUrl).toEqual(expect.stringContaining('http'));
     });
 
     it('el estudiante tambien puede consultar el catalogo', async () => {

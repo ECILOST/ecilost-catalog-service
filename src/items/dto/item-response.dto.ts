@@ -86,6 +86,39 @@ export function toItemResponse(item: Item): ItemResponseDto {
 }
 
 /**
+ * Fila del listado: el objeto mas su portada.
+ *
+ * Es un DTO aparte y no un campo mas de `ItemResponseDto` porque la portada no es un dato
+ * del objeto: es una proyeccion para la rejilla, calculada al listar y con fecha de
+ * caducidad. Un alta o una edicion devuelven el objeto, no la vista del catalogo, y no
+ * tendrian que cargar con un enlace que nadie les pidio.
+ */
+export class ItemListResponseDto extends ItemResponseDto {
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: [
+      'Enlace firmado de la primera fotografia del objeto, para la tarjeta del catalogo.',
+      'Nulo cuando el objeto todavia no tiene ninguna.',
+      '',
+      'Es una sola fotografia y no la galeria: el listado existe para reconocer objetos de',
+      'un vistazo, no para inspeccionarlos, y eso es la ficha.',
+      '',
+      'Caduca a los quince minutos, como los de la ficha, asi que no sirve guardarlo: para',
+      'obtener uno nuevo hay que volver a listar.',
+    ].join('\n'),
+  })
+  coverUrl: string | null;
+}
+
+export function toItemListResponse(
+  item: Item,
+  coverUrl: string | null,
+): ItemListResponseDto {
+  return { ...toItemResponse(item), coverUrl };
+}
+
+/**
  * La ficha completa del objeto: sus datos mas su multimedia (HU-07, HU-08).
  *
  * Solo la consulta de un objeto la devuelve. El listado sigue entregando `ItemResponseDto`

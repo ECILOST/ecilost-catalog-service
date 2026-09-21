@@ -55,6 +55,21 @@ export class FakeMediaAssetRepository implements MediaAssetRepository {
       .sort((a, b) => a.kind.localeCompare(b.kind) || a.position - b.position);
   }
 
+  async findCovers(itemIds: string[]): Promise<Map<string, MediaAsset>> {
+    const covers = new Map<string, MediaAsset>();
+
+    for (const itemId of itemIds) {
+      // La de menor posicion, como el adaptador de verdad: `findByItem` ya las entrega
+      // ordenadas, asi que la primera fotografia de la lista es la portada.
+      const photo = (await this.findByItem(itemId)).find(
+        (asset) => asset.kind === MediaKind.PHOTO,
+      );
+      if (photo) covers.set(itemId, photo);
+    }
+
+    return covers;
+  }
+
   async countPhotos(itemId: string): Promise<number> {
     return (await this.findByItem(itemId)).filter(
       (a) => a.kind === MediaKind.PHOTO,

@@ -48,9 +48,11 @@ import { DeleteItemQueryDto } from './dto/delete-item-query.dto.js';
 import {
   ItemDetailResponseDto,
   ItemFichaResponseDto,
+  ItemListResponseDto,
   ItemResponseDto,
   toItemDetailResponse,
   toItemFichaResponse,
+  toItemListResponse,
   toItemResponse,
 } from './dto/item-response.dto.js';
 import { ListItemsQueryDto } from './dto/list-items-query.dto.js';
@@ -129,19 +131,29 @@ export class ItemsController {
       'se convierte en un problema con veinte mil.',
     ].join('\n'),
   })
-  @ApiOkResponse({ description: 'Los objetos que cumplen el filtro.', type: [ItemResponseDto] })
+  @ApiOkResponse({
+    description: 'Los objetos que cumplen el filtro.',
+    type: [ItemListResponseDto],
+  })
   @ApiBadRequestResponse({
     description: 'Un filtro o un parametro de pagina no es valido.',
     type: ProblemDetailsDto,
   })
-  async findAll(@Query() query: ListItemsQueryDto): Promise<ItemResponseDto[]> {
+  async findAll(@Query() query: ListItemsQueryDto): Promise<ItemListResponseDto[]> {
     const items = await this.items.findAll({
       status: query.status,
       category: query.category,
       limit: query.limit,
       offset: query.offset,
     });
-    return items.map(toItemResponse);
+
+    // Una sola consulta para las portadas de toda la pagina, despues de saber que objetos
+    // son. Pedirlas dentro del map seria una consulta por tarjeta.
+    const covers = await this.media.findCovers(items.map((item) => item.id));
+
+    return items.map((item) =>
+      toItemListResponse(item, covers.get(item.id) ?? null),
+    );
   }
 
   @Get(':id')

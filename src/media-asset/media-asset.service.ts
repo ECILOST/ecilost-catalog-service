@@ -127,6 +127,37 @@ export class MediaAssetService {
   }
 
   /**
+   * La portada de cada objeto del listado: su primera fotografia, ya firmada.
+   *
+   * El listado no lleva la multimedia entera a proposito, pero sin ninguna imagen una
+   * rejilla de objetos perdidos deja de servir para reconocerlos, que es para lo que se
+   * mira. Una URL por objeto es el punto medio: una consulta para toda la pagina, y firmar
+   * es un HMAC local que ademas va por detras de la cache de firmas.
+   *
+   * Devuelve un mapa y no un arreglo porque quien lo llama tiene los objetos, no las
+   * fotografias: lo que necesita es preguntar por identificador. Los objetos sin fotografia
+   * no estan en el mapa, y el listado los publica con la portada en nulo.
+   */
+  async findCovers(itemIds: string[]): Promise<Map<string, string>> {
+    const covers = await this.assets.findCovers(itemIds);
+
+    const signed = await Promise.all(
+      [...covers].map(
+        async ([itemId, asset]) =>
+          [
+            itemId,
+            await this.storage.signedReadUrl(
+              asset.storageKey,
+              READ_URL_TTL_SECONDS,
+            ),
+          ] as const,
+      ),
+    );
+
+    return new Map(signed);
+  }
+
+  /**
    * Reconoce el formato por los bytes y aplica el tope de tamano.
    *
    * No mira la extension ni el `Content-Type` de la peticion: los dos los escribe el
