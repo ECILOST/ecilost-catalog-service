@@ -21,6 +21,17 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
+## Multimedia en Azure Blob Storage
+
+La aplicacion usa Azure Blob Storage. La migracion desde MinIO es intencionalmente no destructiva: valida cada objeto contra la metadata de Catalog y nunca borra el origen.
+
+1. Configure `DATABASE_URL`, las variables `AZURE_STORAGE_*` y, solo para la migracion, `MINIO_S3_ENDPOINT`, `MINIO_S3_ACCESS_KEY`, `MINIO_S3_SECRET_KEY` y `MINIO_S3_BUCKET`.
+2. Ejecute `npm run media:migrate:minio` para revisar la copia propuesta.
+3. Ejecute `npm run media:migrate:minio -- --apply` para copiar. Revise el resultado antes de retirar MinIO.
+4. Ejecute `npm run media:cleanup-orphans` para listar blobs sin fila `MediaAsset` (por defecto protege los de menos de 24 horas). Solo tras revisarlo: `npm run media:cleanup-orphans -- --apply`.
+
+`MEDIA_ORPHAN_GRACE_HOURS` permite ajustar el periodo de gracia. La limpieza solo inspecciona el prefijo `items/` y no borra registros de base de datos.
+
 ## Description
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
