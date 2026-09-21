@@ -1,5 +1,11 @@
 import { plainToInstance } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUrl, validateSync } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  validateSync,
+} from 'class-validator';
 
 /**
  * Contrato de entorno del servicio. Se valida al arrancar, no en la primera peticion:
@@ -20,20 +26,18 @@ export class EnvironmentVariables {
   @IsNotEmpty() @IsString() JWT_ISSUER: string;
   @IsNotEmpty() @IsString() JWT_AUDIENCE: string;
 
-  /**
-   * Almacen de objetos donde viven las fotografias y el video (HU-07).
-   *
-   * Solo datos de conexion. Los limites de tamano y de cantidad no estan aqui porque
-   * describen el producto y no el despliegue: viven en `media-asset/domain/media-policy.ts`.
-   */
-  @IsUrl({ require_tld: false }) MEDIA_S3_ENDPOINT: string;
-  @IsNotEmpty() @IsString() MEDIA_S3_REGION: string;
-  @IsNotEmpty() @IsString() MEDIA_S3_BUCKET: string;
-  @IsNotEmpty() @IsString() MEDIA_S3_ACCESS_KEY: string;
-  @IsNotEmpty() @IsString() MEDIA_S3_SECRET_KEY: string;
+  /** Azure Blob Storage. En Azure se usa identidad administrada; Azurite usa connection string. */
+  @IsNotEmpty() @IsString() AZURE_STORAGE_ACCOUNT_NAME: string;
+  @IsNotEmpty() @IsString() AZURE_STORAGE_CONTAINER: string;
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  AZURE_STORAGE_ACCOUNT_URL?: string;
+  @IsOptional() @IsString() AZURE_STORAGE_CONNECTION_STRING?: string;
 }
 
-export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables {
+export function validateEnv(
+  raw: Record<string, unknown>,
+): EnvironmentVariables {
   const parsed = plainToInstance(EnvironmentVariables, raw, {
     enableImplicitConversion: true,
   });
@@ -41,9 +45,21 @@ export function validateEnv(raw: Record<string, unknown>): EnvironmentVariables 
   const errors = validateSync(parsed, { skipMissingProperties: false });
   if (errors.length > 0) {
     const detail = errors
-      .map((e) => `  - ${e.property}: ${Object.values(e.constraints ?? {}).join(', ')}`)
+      .map(
+        (e) =>
+          `  - ${e.property}: ${Object.values(e.constraints ?? {}).join(', ')}`,
+      )
       .join('\n');
     throw new Error(`Configuracion de entorno invalida:\n${detail}`);
+  }
+  if (
+    !parsed.AZURE_STORAGE_CONNECTION_STRING &&
+    !parsed.AZURE_STORAGE_ACCOUNT_URL
+  ) {
+    throw new Error(
+      'Configuracion de entorno invalida:\n' +
+        '  - AZURE_STORAGE_ACCOUNT_URL o AZURE_STORAGE_CONNECTION_STRING es obligatorio',
+    );
   }
   return parsed;
 }
@@ -55,11 +71,10 @@ export class CatalogConfig {
   readonly authJwksUrl: string;
   readonly jwtIssuer: string;
   readonly jwtAudience: string;
-  readonly mediaEndpoint: string;
-  readonly mediaRegion: string;
-  readonly mediaBucket: string;
-  readonly mediaAccessKey: string;
-  readonly mediaSecretKey: string;
+  readonly mediaAzureAccountName: string;
+  readonly mediaAzureContainer: string;
+  readonly mediaAzureAccountUrl: string;
+  readonly mediaAzureConnectionString?: string;
 
   constructor(env: EnvironmentVariables) {
     this.databaseUrl = env.DATABASE_URL;
@@ -67,11 +82,10 @@ export class CatalogConfig {
     this.authJwksUrl = env.AUTH_JWKS_URL;
     this.jwtIssuer = env.JWT_ISSUER;
     this.jwtAudience = env.JWT_AUDIENCE;
-    this.mediaEndpoint = env.MEDIA_S3_ENDPOINT;
-    this.mediaRegion = env.MEDIA_S3_REGION;
-    this.mediaBucket = env.MEDIA_S3_BUCKET;
-    this.mediaAccessKey = env.MEDIA_S3_ACCESS_KEY;
-    this.mediaSecretKey = env.MEDIA_S3_SECRET_KEY;
+    this.mediaAzureAccountName = env.AZURE_STORAGE_ACCOUNT_NAME;
+    this.mediaAzureContainer = env.AZURE_STORAGE_CONTAINER;
+    this.mediaAzureAccountUrl = env.AZURE_STORAGE_ACCOUNT_URL ?? '';
+    this.mediaAzureConnectionString = env.AZURE_STORAGE_CONNECTION_STRING;
   }
 }
 
