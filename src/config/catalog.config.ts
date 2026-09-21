@@ -33,6 +33,7 @@ export class EnvironmentVariables {
   @IsUrl({ require_tld: false })
   AZURE_STORAGE_ACCOUNT_URL?: string;
   @IsOptional() @IsString() AZURE_STORAGE_CONNECTION_STRING?: string;
+  @IsNotEmpty() @IsString() RABBITMQ_URL: string;
 }
 
 export function validateEnv(
@@ -75,6 +76,7 @@ export class CatalogConfig {
   readonly mediaAzureContainer: string;
   readonly mediaAzureAccountUrl: string;
   readonly mediaAzureConnectionString?: string;
+  readonly rabbitmqUrl: string;
 
   constructor(env: EnvironmentVariables) {
     this.databaseUrl = env.DATABASE_URL;
@@ -86,6 +88,7 @@ export class CatalogConfig {
     this.mediaAzureContainer = env.AZURE_STORAGE_CONTAINER;
     this.mediaAzureAccountUrl = env.AZURE_STORAGE_ACCOUNT_URL ?? '';
     this.mediaAzureConnectionString = env.AZURE_STORAGE_CONNECTION_STRING;
+    this.rabbitmqUrl = env.RABBITMQ_URL;
   }
 }
 
