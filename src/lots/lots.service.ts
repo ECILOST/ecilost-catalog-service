@@ -1,7 +1,8 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ProblemException } from '../common/http/problem.exception.js';
-import { type Lot } from './entities/lot.entity.js';
+import { type Lot, isLotHiddenFrom } from './entities/lot.entity.js';
+import type { CatalogViewer } from '../items/entities/item.entity.js';
 
 @Injectable()
 export class LotsService {
@@ -43,17 +44,20 @@ export class LotsService {
   }
 
   /** Todos los lotes, o solo `ids`: las rondas de subasta piden los suyos de una vez. */
-  findAll(ids?: string[]): Promise<Lot[]> {
-    return this.prisma.lot.findMany({
+  async findAll(ids?: string[], viewer?: CatalogViewer): Promise<Lot[]> {
+    const lots = await this.prisma.lot.findMany({
       where: ids ? { id: { in: ids } } : undefined,
       include: { items: { orderBy: { registeredAt: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
+    // ADR-0002: lo que oculta un lote misterioso no se lista al estudiante.
+    return viewer ? lots.filter((lot) => !isLotHiddenFrom(lot, viewer)) : lots;
   }
 
-  async findOne(id: string): Promise<Lot> {
+  async findOne(id: string, viewer?: CatalogViewer): Promise<Lot> {
     const lot = await this.prisma.lot.findUnique({ where: { id }, include: { items: { orderBy: { registeredAt: 'asc' } } } });
-    if (!lot) throw new NotFoundException(`No existe el lote ${id}.`);
+    // Oculto o inexistente responden igual: 404.
+    if (!lot || (viewer && isLotHiddenFrom(lot, viewer))) throw new NotFoundException(`No existe el lote ${id}.`);
     return lot;
   }
 

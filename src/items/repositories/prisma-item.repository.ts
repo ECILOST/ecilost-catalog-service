@@ -20,6 +20,7 @@ export class PrismaItemRepository implements ItemRepository {
         description: input.description,
         condition: input.condition,
         category: input.category,
+        clues: input.clues ?? [],
         registeredBy: input.registeredBy,
         // Quien registra es quien modifico por ultima vez, hasta que alguien lo edite.
         lastModifiedBy: input.registeredBy,
@@ -38,6 +39,9 @@ export class PrismaItemRepository implements ItemRepository {
         status: filter.status,
         category: filter.category,
         ...(filter.ids ? { id: { in: filter.ids } } : {}),
+        ...(filter.visibleTo !== undefined
+          ? { OR: [{ mystery: false }, { awardedTo: filter.visibleTo }] }
+          : {}),
       },
       orderBy: { registeredAt: 'desc' },
       // Con ids se pide un conjunto conocido (ya acotado por el DTO): paginarlo lo cortaria.

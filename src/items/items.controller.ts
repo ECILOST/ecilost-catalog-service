@@ -44,6 +44,7 @@ import {
   ItemNotFoundError,
 } from './domain/item-errors.js';
 import { CreateItemDto } from './dto/create-item.dto.js';
+import { isHiddenFrom } from './entities/item.entity.js';
 import { DeleteItemQueryDto } from './dto/delete-item-query.dto.js';
 import {
   ItemDetailResponseDto,
@@ -113,6 +114,7 @@ export class ItemsController {
       description: body.description,
       condition: body.condition,
       category: body.category,
+      clues: body.clues,
       registeredBy: principal.userId,
     });
     return toItemResponse(item);
@@ -139,13 +141,18 @@ export class ItemsController {
     description: 'Un filtro o un parametro de pagina no es valido.',
     type: ProblemDetailsDto,
   })
-  async findAll(@Query() query: ListItemsQueryDto): Promise<ItemListResponseDto[]> {
+  async findAll(
+    @CurrentUser() principal: Principal,
+    @Query() query: ListItemsQueryDto,
+  ): Promise<ItemListResponseDto[]> {
     const items = await this.items.findAll({
       status: query.status,
       category: query.category,
       ids: query.ids,
       limit: query.limit,
       offset: query.offset,
+      // ADR-0002: el estudiante no ve lo que oculta un lote misterioso, salvo lo que gano.
+      visibleTo: principal.canManageCatalog() ? undefined : principal.userId,
     });
 
     // Una sola consulta para las portadas de toda la pagina, despues de saber que objetos
@@ -205,6 +212,11 @@ export class ItemsController {
   ): Promise<ItemDetailResponseDto | ItemFichaResponseDto> {
     try {
       const item = await this.items.findById(id);
+      // ADR-0002: un objeto oculto por un lote misterioso responde 404, como si no existiera:
+      // un 403 confirmaria que el id corresponde a algo que se esta subastando a ciegas.
+      if (isHiddenFrom(item, { userId: principal.userId, canManageCatalog: principal.canManageCatalog() })) {
+        throw new ItemNotFoundError(id);
+      }
       // Se pide despues de confirmar que el objeto existe: firmar las URL de una ficha que
       // va a responder 404 seria trabajo tirado.
       const completa = toItemDetailResponse(item, await this.media.findByItem(id));

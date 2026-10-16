@@ -8,6 +8,8 @@ export interface RegisterItemInput {
   category: string;
   /** userId del funcionario que lo registra, tomado del access token. */
   registeredBy: string;
+  /** Pistas para el lote misterioso (ADR-0002). Opcionales. */
+  clues?: string[];
 }
 
 /** Cambio parcial del objeto. Un campo ausente no se toca. */
@@ -17,6 +19,7 @@ export interface ItemPatch {
   condition?: ItemCondition;
   category?: string;
   status?: ItemStatus;
+  clues?: string[];
 }
 
 export interface UpdateItemInput {
@@ -34,6 +37,11 @@ export interface ItemFilter {
   ids?: string[];
   limit: number;
   offset: number;
+  /**
+   * ADR-0002: si viene, se excluyen los objetos ocultos por un lote misterioso salvo los que
+   * gano este usuario. El filtro va en la consulta para que la paginacion no salga corta.
+   */
+  visibleTo?: string;
 }
 
 /** Se lanza cuando la version esperada ya no es la vigente. El controlador lo vuelve 409. */
