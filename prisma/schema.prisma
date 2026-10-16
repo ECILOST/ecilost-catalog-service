@@ -78,6 +78,14 @@ model Item {
   /// objeto ya creado, asi que el alta de la HU-03 no los pide.
   media MediaAsset[]
 
+  /// Lote misterioso (ADR-0002). Pistas que escribe el funcionario; son, con la categoria y la
+  /// condicion, lo unico que ve el estudiante mientras el objeto esta oculto.
+  clues   String[] @default([])
+  /// Oculto al estudiante porque su ronda salio como lote misterioso en la ruleta de auction.
+  mystery Boolean  @default(false)
+  /// Ganador de la ronda que lo adjudico. Al objeto misterioso solo lo ve el, ademas del funcionario.
+  awardedTo String?
+
   @@index([status])
   @@index([category])
   @@map("items")
@@ -90,6 +98,8 @@ model Lot {
   status    LotStatus @default(ACTIVE)
   createdBy String
   createdAt DateTime  @default(now())
+  /// Oculto al estudiante: su ronda salio como lote misterioso (ADR-0002).
+  mystery   Boolean   @default(false)
   items     Item[]
 
   @@index([status])
