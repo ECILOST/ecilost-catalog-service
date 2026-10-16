@@ -254,6 +254,28 @@ describe('Items (e2e)', () => {
       expect(body[0].status).toBe('AVAILABLE');
     });
 
+    it('con ids devuelve solo esos objetos, todos, con su portada', async () => {
+      const a = repository.seed({ name: 'Portatil' });
+      const b = repository.seed({ name: 'Termo' });
+      repository.seed({ name: 'Otro' });
+      actor = ESTUDIANTE;
+
+      // limit=1 no corta un conjunto pedido por ids.
+      const { body, status } = await request(app.getHttpServer()).get(
+        `/items?ids=${a.id},${b.id}&limit=1`,
+      );
+
+      expect(status).toBe(200);
+      expect(body.map((i: { name: string }) => i.name).sort()).toEqual(['Portatil', 'Termo']);
+      expect(body[0]).toHaveProperty('coverUrl');
+    });
+
+    it('rechaza ids que no son UUID', async () => {
+      const { status } = await request(app.getHttpServer()).get('/items?ids=1,2');
+
+      expect(status).toBe(400);
+    });
+
     it('rechaza un tope de pagina fuera de rango', async () => {
       const { status } = await request(app.getHttpServer()).get('/items?limit=5000');
 

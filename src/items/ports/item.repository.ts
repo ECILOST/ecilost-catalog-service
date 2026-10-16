@@ -30,6 +30,8 @@ export interface UpdateItemInput {
 export interface ItemFilter {
   status?: ItemStatus;
   category?: string;
+  /** Solo estos objetos. Con ids no se pagina: `limit` y `offset` no aplican. */
+  ids?: string[];
   limit: number;
   offset: number;
 }

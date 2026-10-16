@@ -37,10 +37,12 @@ export class PrismaItemRepository implements ItemRepository {
       where: {
         status: filter.status,
         category: filter.category,
+        ...(filter.ids ? { id: { in: filter.ids } } : {}),
       },
       orderBy: { registeredAt: 'desc' },
-      take: filter.limit,
-      skip: filter.offset,
+      // Con ids se pide un conjunto conocido (ya acotado por el DTO): paginarlo lo cortaria.
+      take: filter.ids ? undefined : filter.limit,
+      skip: filter.ids ? undefined : filter.offset,
     });
   }
 

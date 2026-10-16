@@ -42,8 +42,13 @@ export class LotsService {
     }
   }
 
-  findAll(): Promise<Lot[]> {
-    return this.prisma.lot.findMany({ include: { items: { orderBy: { registeredAt: 'asc' } } }, orderBy: { createdAt: 'desc' } });
+  /** Todos los lotes, o solo `ids`: las rondas de subasta piden los suyos de una vez. */
+  findAll(ids?: string[]): Promise<Lot[]> {
+    return this.prisma.lot.findMany({
+      where: ids ? { id: { in: ids } } : undefined,
+      include: { items: { orderBy: { registeredAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async findOne(id: string): Promise<Lot> {

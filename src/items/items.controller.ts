@@ -143,6 +143,7 @@ export class ItemsController {
     const items = await this.items.findAll({
       status: query.status,
       category: query.category,
+      ids: query.ids,
       limit: query.limit,
       offset: query.offset,
     });

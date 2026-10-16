@@ -1,10 +1,30 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ItemStatus } from '../../generated/prisma/enums.js';
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
+
+/** `?ids=a,b,c` llega como una cadena; se valida como lista. */
+export const commaList = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string'
+    ? value
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+    : value;
 
 /**
  * Filtros del catalogo. El tope de pagina es obligatorio y tiene maximo: una consulta sin
@@ -44,4 +64,17 @@ export class ListItemsQueryDto {
   @IsInt()
   @Min(0)
   offset: number = 0;
+
+  @ApiPropertyOptional({
+    description:
+      'Solo estos objetos, separados por comas. Con ids no se pagina: vuelven todos los ' +
+      'que existan, hasta ' + MAX_PAGE_SIZE + '.',
+    example: '1f0c…,9a2b…',
+  })
+  @IsOptional()
+  @Transform(commaList)
+  @IsArray()
+  @ArrayMaxSize(MAX_PAGE_SIZE)
+  @IsUUID('all', { each: true })
+  ids?: string[];
 }

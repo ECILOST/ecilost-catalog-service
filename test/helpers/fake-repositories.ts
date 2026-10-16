@@ -47,8 +47,12 @@ export class FakeItemRepository implements ItemRepository {
     return [...this.rows.values()]
       .filter((i) => (filter.status ? i.status === filter.status : true))
       .filter((i) => (filter.category ? i.category === filter.category : true))
+      .filter((i) => (filter.ids ? filter.ids.includes(i.id) : true))
       .sort((a, b) => b.registeredAt.getTime() - a.registeredAt.getTime())
-      .slice(filter.offset, filter.offset + filter.limit);
+      .slice(
+        filter.ids ? 0 : filter.offset,
+        filter.ids ? undefined : filter.offset + filter.limit,
+      );
   }
 
   async update({
