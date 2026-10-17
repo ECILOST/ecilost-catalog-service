@@ -38,6 +38,7 @@ import { AzureBlobMediaStorage } from './storage/azure-blob-media-storage.js';
       inject: [CatalogConfig],
     },
   ],
-  exports: [MediaAssetService],
+  // MEDIA_STORAGE sale tambien para las fotografias de los lotes: mismo almacen y cache de firmas.
+  exports: [MediaAssetService, MEDIA_STORAGE],
 })
 export class MediaAssetModule {}

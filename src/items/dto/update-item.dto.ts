@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { ItemCondition, ItemStatus } from '../../generated/prisma/enums.js';
 import type { ItemPatch } from '../ports/item.repository.js';
+import { Clues } from './clues.js';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -74,6 +75,9 @@ export class UpdateItemDto {
   @IsOptional()
   @IsEnum(ItemStatus)
   status?: ItemStatus;
+
+  @Clues()
+  clues?: string[];
 }
 
 /**
@@ -93,5 +97,6 @@ export function toItemPatch(dto: UpdateItemDto): ItemPatch {
   if (dto.condition !== undefined) patch.condition = dto.condition;
   if (dto.category !== undefined) patch.category = dto.category;
   if (dto.status !== undefined) patch.status = dto.status;
+  if (dto.clues !== undefined) patch.clues = dto.clues;
   return patch;
 }

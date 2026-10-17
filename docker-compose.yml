@@ -19,7 +19,7 @@ services:
 
   # Emulador local del servicio de Blob Storage usado en Azure.
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
     container_name: ecilost-catalog-azurite
     restart: unless-stopped
     command: azurite-blob --blobHost 0.0.0.0 --disableProductStyleUrl --location /data --debug /data/debug.log

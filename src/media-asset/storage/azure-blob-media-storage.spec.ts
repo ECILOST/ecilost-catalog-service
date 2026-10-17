@@ -94,3 +94,27 @@ describe('AzureBlobMediaStorage con identidad administrada', () => {
     expect(getUserDelegationKey).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('AzureBlobMediaStorage.remove', () => {
+  it('borra el blob con deleteIfExists de su cliente (el contenedor no tiene deleteBlobIfExists)', async () => {
+    const storage = new AzureBlobMediaStorage({
+      mediaAzureConnectionString: AZURITE,
+      mediaAzureAccountName: 'devstoreaccount1',
+      mediaAzureContainer: 'catalog-media',
+    } as CatalogConfig);
+    const deleteIfExists = vi.fn().mockResolvedValue({ succeeded: true });
+    const getBlockBlobClient = vi.fn(() => ({ deleteIfExists }));
+    (
+      storage as unknown as {
+        container: { getBlockBlobClient: typeof getBlockBlobClient };
+      }
+    ).container = {
+      getBlockBlobClient,
+    };
+
+    await storage.remove('items/a.png');
+
+    expect(getBlockBlobClient).toHaveBeenCalledWith('items/a.png');
+    expect(deleteIfExists).toHaveBeenCalledOnce();
+  });
+});

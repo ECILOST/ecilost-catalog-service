@@ -8,6 +8,7 @@ import { ItemsModule } from './items/items.module.js';
 import { LotsModule } from './lots/lots.module.js';
 import { MediaAssetModule } from './media-asset/media-asset.module.js';
 import { EventsModule } from './events/events.module.js';
+import { MysteryModule } from './mystery/mystery.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { EventsModule } from './events/events.module.js';
     LotsModule,
     MediaAssetModule,
     EventsModule,
+    MysteryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -78,6 +78,14 @@ model Item {
   /// objeto ya creado, asi que el alta de la HU-03 no los pide.
   media MediaAsset[]
 
+  /// Lote misterioso (ADR-0002). Pistas que escribe el funcionario; son, con la categoria y la
+  /// condicion, lo unico que ve el estudiante mientras el objeto esta oculto.
+  clues   String[] @default([])
+  /// Oculto al estudiante porque su ronda salio como lote misterioso en la ruleta de auction.
+  mystery Boolean  @default(false)
+  /// Ganador de la ronda que lo adjudico. Al objeto misterioso solo lo ve el, ademas del funcionario.
+  awardedTo String?
+
   @@index([status])
   @@index([category])
   @@map("items")
@@ -90,10 +98,39 @@ model Lot {
   status    LotStatus @default(ACTIVE)
   createdBy String
   createdAt DateTime  @default(now())
+  /// Oculto al estudiante: su ronda salio como lote misterioso (ADR-0002).
+  mystery   Boolean   @default(false)
   items     Item[]
+  /// Fotografias del lote como conjunto: su portada en el catalogo y en la subasta.
+  photos    LotPhoto[]
 
   @@index([status])
   @@map("lots")
+}
+
+/// Fotografia de un lote. Va en tabla propia y no en `media_assets` porque un lote solo
+/// lleva fotos (sin video ni sus reglas), y mezclarlas obligaria a que cada fila de
+/// multimedia pudiera colgar de dos duenos distintos.
+///
+/// Como en `MediaAsset`, solo guarda la referencia: los bytes viven en el almacen y la URL
+/// de lectura se firma al responder.
+model LotPhoto {
+  id    String @id @default(uuid())
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  storageKey  String @unique
+  contentType String
+  sizeBytes   Int
+  /// Orden dentro de la galeria del lote; la primera es la portada.
+  position    Int    @default(0)
+
+  /// userId del funcionario que la subio, sin clave foranea (identidades de auth-service).
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  @@index([lotId])
+  @@map("lot_photos")
 }
 
 /// Fotografia o video que documenta el estado real del objeto antes de publicarlo (HU-07),

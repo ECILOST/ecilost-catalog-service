@@ -13,12 +13,12 @@ describe('settleCatalogRound', () => {
     const tx = transaction();
 
     await expect(
-      settleCatalogRound(tx as never, { roundId: 'r1', result: 'AWARDED', entries: [{ kind: 'ITEM', catalogId: 'i1' }] }),
+      settleCatalogRound(tx as never, { roundId: 'r1', result: 'AWARDED', winnerId: 'ana', entries: [{ kind: 'ITEM', catalogId: 'i1' }] }),
     ).resolves.toEqual({ awarded: true, items: 1, lots: 0 });
 
     expect(tx.item.updateMany).toHaveBeenCalledWith({
       where: { id: 'i1', status: 'IN_ROUND', roundId: 'r1' },
-      data: { status: 'SOLD', version: { increment: 1 } },
+      data: { status: 'SOLD', awardedTo: 'ana', version: { increment: 1 } },
     });
   });
 
@@ -29,19 +29,19 @@ describe('settleCatalogRound', () => {
 
     expect(tx.item.updateMany).toHaveBeenCalledWith({
       where: { id: 'i1', status: 'IN_ROUND', roundId: 'r1' },
-      data: { status: 'AVAILABLE', roundId: null, version: { increment: 1 } },
+      data: { status: 'AVAILABLE', roundId: null, mystery: false, version: { increment: 1 } },
     });
   });
 
   it('un lote adjudicado se cierra y sus objetos se venden', async () => {
     const tx = transaction(2);
 
-    await settleCatalogRound(tx as never, { roundId: 'r1', result: 'AWARDED', entries: [{ kind: 'LOT', catalogId: 'l1' }] });
+    await settleCatalogRound(tx as never, { roundId: 'r1', result: 'AWARDED', winnerId: 'ana', entries: [{ kind: 'LOT', catalogId: 'l1' }] });
 
     expect(tx.lot.updateMany).toHaveBeenCalledWith({ where: { id: 'l1', status: 'IN_ROUND' }, data: { status: 'CLOSED' } });
     expect(tx.item.updateMany).toHaveBeenCalledWith({
       where: { lotId: 'l1', status: 'IN_ROUND', roundId: 'r1' },
-      data: { status: 'SOLD', version: { increment: 1 } },
+      data: { status: 'SOLD', awardedTo: 'ana', version: { increment: 1 } },
     });
   });
 
@@ -50,10 +50,10 @@ describe('settleCatalogRound', () => {
 
     await settleCatalogRound(tx as never, { roundId: 'r1', result: 'DESERTED', entries: [{ kind: 'LOT', catalogId: 'l1' }] });
 
-    expect(tx.lot.updateMany).toHaveBeenCalledWith({ where: { id: 'l1', status: 'IN_ROUND' }, data: { status: 'ACTIVE' } });
+    expect(tx.lot.updateMany).toHaveBeenCalledWith({ where: { id: 'l1', status: 'IN_ROUND' }, data: { status: 'ACTIVE', mystery: false } });
     expect(tx.item.updateMany).toHaveBeenCalledWith({
       where: { lotId: 'l1', status: 'IN_ROUND', roundId: 'r1' },
-      data: { status: 'IN_LOT', roundId: null, version: { increment: 1 } },
+      data: { status: 'IN_LOT', roundId: null, mystery: false, version: { increment: 1 } },
     });
   });
 
@@ -63,6 +63,14 @@ describe('settleCatalogRound', () => {
     await expect(
       settleCatalogRound(tx as never, { roundId: 'r1', currentBidderId: 'alice', entries: [{ kind: 'ITEM', catalogId: 'i1' }] }),
     ).resolves.toMatchObject({ awarded: true });
+  });
+
+  it('sin winnerId (eventos anteriores) anota como ganador al lider al cerrar', async () => {
+    const tx = transaction();
+
+    await settleCatalogRound(tx as never, { roundId: 'r1', currentBidderId: 'alice', entries: [{ kind: 'ITEM', catalogId: 'i1' }] });
+
+    expect(tx.item.updateMany.mock.calls[0][0].data).toMatchObject({ awardedTo: 'alice' });
   });
 
   it('reprocesar el mismo cierre no cambia nada', async () => {

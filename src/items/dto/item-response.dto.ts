@@ -28,6 +28,12 @@ export class ItemResponseDto {
   category: string;
 
   @ApiProperty({
+    type: [String],
+    description: 'Pistas para el lote misterioso (ADR-0002). Puede venir vacia.',
+  })
+  clues: string[];
+
+  @ApiProperty({
     enum: Object.values(ItemStatus),
     description: 'Un objeto recien registrado siempre sale AVAILABLE.',
   })
@@ -74,6 +80,7 @@ export function toItemResponse(item: Item): ItemResponseDto {
     description: item.description,
     condition: item.condition,
     category: item.category,
+    clues: item.clues,
     status: item.status,
     lotId: item.lotId,
     roundId: item.roundId,
@@ -167,6 +174,9 @@ export class ItemFichaResponseDto extends OmitType(ItemDetailResponseDto, [
   'registeredBy',
   'lastModifiedBy',
   'lastModifiedAt',
+  // Las pistas son del lote misterioso (ADR-0002): al estudiante le llegan por
+  // GET /mystery/rounds/:roundId, nunca junto al nombre y las fotos que deben ocultar.
+  'clues',
 ] as const) {}
 
 /**

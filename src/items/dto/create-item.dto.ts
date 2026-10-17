@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { ItemCondition } from '../../generated/prisma/enums.js';
+import { Clues } from './clues.js';
 
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
@@ -58,4 +59,7 @@ export class CreateItemDto {
   @IsNotEmpty({ message: 'category es obligatorio' })
   @MaxLength(60)
   category: string;
+
+  @Clues()
+  clues?: string[];
 }

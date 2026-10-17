@@ -48,3 +48,21 @@ const STAFF_TRANSITIONS: Record<ItemStatus, readonly ItemStatus[]> = {
 export function canStaffTransition(from: ItemStatus, to: ItemStatus): boolean {
   return from === to || STAFF_TRANSITIONS[from].includes(to);
 }
+
+/** Quien consulta, para decidir si ve un objeto oculto (ADR-0002). */
+export interface CatalogViewer {
+  userId: string;
+  /** El funcionario administra el catalogo: ve todo, tambien lo misterioso. */
+  canManageCatalog: boolean;
+}
+
+/**
+ * Lote misterioso (ADR-0002): mientras su ronda lo oculta, el estudiante no ve el objeto ni
+ * sabe que existe. La excepcion es quien lo gano, que es justo a quien se le revela.
+ */
+export function isHiddenFrom(
+  item: Pick<Item, 'mystery' | 'awardedTo'>,
+  viewer: CatalogViewer,
+): boolean {
+  return item.mystery && !viewer.canManageCatalog && item.awardedTo !== viewer.userId;
+}
