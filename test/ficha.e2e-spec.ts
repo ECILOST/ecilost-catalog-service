@@ -74,7 +74,9 @@ describe('Inspeccion de la ficha del objeto (e2e) — HU-08', () => {
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
     app.useGlobalFilters(new ProblemDetailsFilter());
-    await app.init();
+    // Escuchar de una vez: si no, supertest abre el servidor en cada peticion, y las lecturas
+    // simultaneas de abajo compiten por el mismo servidor (ECONNRESET en Linux).
+    await app.listen(0, '127.0.0.1');
 
     itemId = items.seed({
       name: 'Portatil Lenovo ThinkPad',
