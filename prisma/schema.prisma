@@ -101,9 +101,36 @@ model Lot {
   /// Oculto al estudiante: su ronda salio como lote misterioso (ADR-0002).
   mystery   Boolean   @default(false)
   items     Item[]
+  /// Fotografias del lote como conjunto: su portada en el catalogo y en la subasta.
+  photos    LotPhoto[]
 
   @@index([status])
   @@map("lots")
+}
+
+/// Fotografia de un lote. Va en tabla propia y no en `media_assets` porque un lote solo
+/// lleva fotos (sin video ni sus reglas), y mezclarlas obligaria a que cada fila de
+/// multimedia pudiera colgar de dos duenos distintos.
+///
+/// Como en `MediaAsset`, solo guarda la referencia: los bytes viven en el almacen y la URL
+/// de lectura se firma al responder.
+model LotPhoto {
+  id    String @id @default(uuid())
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  storageKey  String @unique
+  contentType String
+  sizeBytes   Int
+  /// Orden dentro de la galeria del lote; la primera es la portada.
+  position    Int    @default(0)
+
+  /// userId del funcionario que la subio, sin clave foranea (identidades de auth-service).
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  @@index([lotId])
+  @@map("lot_photos")
 }
 
 /// Fotografia o video que documenta el estado real del objeto antes de publicarlo (HU-07),

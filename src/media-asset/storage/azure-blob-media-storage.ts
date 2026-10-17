@@ -3,6 +3,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import {
   BlobSASPermissions,
   BlobServiceClient,
+  type ContainerClient,
   generateBlobSASQueryParameters,
   StorageSharedKeyCredential,
   type UserDelegationKey,
@@ -30,7 +31,8 @@ interface CachedDelegationKey {
 export class AzureBlobMediaStorage implements MediaStorage, OnModuleInit {
   private readonly logger = new Logger(AzureBlobMediaStorage.name);
   private readonly service: BlobServiceClient;
-  private readonly container;
+  // Tipado explicito: sin el, quedaba como `any` y TypeScript no revisaba sus llamadas.
+  private readonly container: ContainerClient;
   private readonly sharedKey?: StorageSharedKeyCredential;
   private delegationKey?: CachedDelegationKey;
 
@@ -81,8 +83,10 @@ export class AzureBlobMediaStorage implements MediaStorage, OnModuleInit {
   }
 
   async remove(key: string): Promise<void> {
-    // `deleteIfExists` conserva la semantica idempotente del puerto.
-    await this.container.deleteBlobIfExists(key);
+    // `deleteIfExists` conserva la semantica idempotente del puerto. Va sobre el cliente del
+    // blob: el contenedor no tiene `deleteBlobIfExists`, y llamarlo dejaba cada archivo
+    // borrado de la ficha huerfano en el almacen.
+    await this.container.getBlockBlobClient(key).deleteIfExists();
   }
 
   async signedReadUrl(key: string, ttlSeconds: number): Promise<string> {

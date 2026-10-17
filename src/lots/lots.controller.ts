@@ -11,6 +11,7 @@ import { LotsService } from './lots.service.js';
 import { CreateLotDto } from './dto/create-lot.dto.js';
 import { ListLotsQueryDto } from './dto/list-lots-query.dto.js';
 import { LotResponseDto, toLotResponse } from './dto/lot-response.dto.js';
+import { LotPhotoService } from './photos/lot-photo.service.js';
 
 @ApiTags('Lots')
 @ApiBearerAuth('access-token')
@@ -18,7 +19,10 @@ import { LotResponseDto, toLotResponse } from './dto/lot-response.dto.js';
 @Controller('lots')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LotsController {
-  constructor(private readonly lotsService: LotsService) {}
+  constructor(
+    private readonly lotsService: LotsService,
+    private readonly photos: LotPhotoService,
+  ) {}
 
   @Post()
   @Roles(Role.STAFF)
@@ -29,14 +33,18 @@ export class LotsController {
   @ApiNotFoundResponse({ description: 'Algun objeto solicitado no existe.', type: ProblemDetailsDto })
   @ApiConflictResponse({ description: 'Algun objeto esta asignado o ya no esta disponible.', type: ProblemDetailsDto })
   async create(@CurrentUser() principal: Principal, @Body() body: CreateLotDto): Promise<LotResponseDto> {
-    return toLotResponse(await this.lotsService.create(body.name, body.itemIds, principal.userId));
+    // Un lote recien armado todavia no tiene fotografias.
+    return toLotResponse(await this.lotsService.create(body.name, body.itemIds, principal.userId), null, []);
   }
 
   @Get()
   @ApiOperation({ summary: 'Consultar lotes' })
   @ApiOkResponse({ type: [LotResponseDto] })
   async findAll(@CurrentUser() principal: Principal, @Query() query: ListLotsQueryDto): Promise<LotResponseDto[]> {
-    return (await this.lotsService.findAll(query.ids, viewerOf(principal))).map(toLotResponse);
+    const lots = await this.lotsService.findAll(query.ids, viewerOf(principal));
+    // Una consulta para las portadas de todo el listado, no una por lote.
+    const covers = await this.photos.findCovers(lots.map((lot) => lot.id));
+    return lots.map((lot) => toLotResponse(lot, covers.get(lot.id) ?? null));
   }
 
   @Get(':id')
@@ -44,7 +52,9 @@ export class LotsController {
   @ApiOkResponse({ type: LotResponseDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
   async findOne(@CurrentUser() principal: Principal, @Param('id', ParseUUIDPipe) id: string): Promise<LotResponseDto> {
-    return toLotResponse(await this.lotsService.findOne(id, viewerOf(principal)));
+    // Se pide despues de confirmar que el lote existe y es visible para quien consulta.
+    const lot = await this.lotsService.findOne(id, viewerOf(principal));
+    return toLotResponse(lot, null, await this.photos.findByLot(lot.id));
   }
 }
 
