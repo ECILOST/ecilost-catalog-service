@@ -10,8 +10,10 @@ import { RolesGuard } from '../common/guards/roles.guard.js';
 import { LotsService } from './lots.service.js';
 import { CreateLotDto } from './dto/create-lot.dto.js';
 import { ListLotsQueryDto } from './dto/list-lots-query.dto.js';
-import { LotResponseDto, toLotResponse } from './dto/lot-response.dto.js';
-import { LotPhotoService } from './photos/lot-photo.service.js';
+import { type LotItemPhoto, LotResponseDto, toLotResponse } from './dto/lot-response.dto.js';
+import { isHiddenFrom } from '../items/entities/item.entity.js';
+import { MediaAssetService } from '../media-asset/media-asset.service.js';
+import type { Lot } from './entities/lot.entity.js';
 
 @ApiTags('Lots')
 @ApiBearerAuth('access-token')
@@ -21,7 +23,7 @@ import { LotPhotoService } from './photos/lot-photo.service.js';
 export class LotsController {
   constructor(
     private readonly lotsService: LotsService,
-    private readonly photos: LotPhotoService,
+    private readonly media: MediaAssetService,
   ) {}
 
   @Post()
@@ -33,8 +35,8 @@ export class LotsController {
   @ApiNotFoundResponse({ description: 'Algun objeto solicitado no existe.', type: ProblemDetailsDto })
   @ApiConflictResponse({ description: 'Algun objeto esta asignado o ya no esta disponible.', type: ProblemDetailsDto })
   async create(@CurrentUser() principal: Principal, @Body() body: CreateLotDto): Promise<LotResponseDto> {
-    // Un lote recien armado todavia no tiene fotografias.
-    return toLotResponse(await this.lotsService.create(body.name, body.itemIds, principal.userId), null, []);
+    const lot = await this.lotsService.create(body.name, body.itemIds, principal.userId);
+    return toLotResponse(lot, null, await this.photosOf(lot, viewerOf(principal)));
   }
 
   @Get()
@@ -42,9 +44,14 @@ export class LotsController {
   @ApiOkResponse({ type: [LotResponseDto] })
   async findAll(@CurrentUser() principal: Principal, @Query() query: ListLotsQueryDto): Promise<LotResponseDto[]> {
     const lots = await this.lotsService.findAll(query.ids, viewerOf(principal));
-    // Una consulta para las portadas de todo el listado, no una por lote.
-    const covers = await this.photos.findCovers(lots.map((lot) => lot.id));
-    return lots.map((lot) => toLotResponse(lot, covers.get(lot.id) ?? null));
+    // Una consulta para las portadas de todos los objetos del listado, no una por lote. La
+    // portada del lote es la del primer objeto que tenga fotografia.
+    const viewer = viewerOf(principal);
+    const covers = await this.media.findCovers(lots.flatMap((lot) => visibleItems(lot, viewer).map((item) => item.id)));
+    return lots.map((lot) => {
+      const first = visibleItems(lot, viewer).find((item) => covers.has(item.id));
+      return toLotResponse(lot, first ? (covers.get(first.id) ?? null) : null);
+    });
   }
 
   @Get(':id')
@@ -54,9 +61,24 @@ export class LotsController {
   async findOne(@CurrentUser() principal: Principal, @Param('id', ParseUUIDPipe) id: string): Promise<LotResponseDto> {
     // Se pide despues de confirmar que el lote existe y es visible para quien consulta.
     const lot = await this.lotsService.findOne(id, viewerOf(principal));
-    return toLotResponse(lot, null, await this.photos.findByLot(lot.id));
+    return toLotResponse(lot, null, await this.photosOf(lot, viewerOf(principal)));
+  }
+
+  /**
+   * Las fotografias que ya tiene cada objeto del lote, en el orden de los objetos. Un lote
+   * agrupa pocos objetos, asi que se pide la multimedia de cada uno en paralelo.
+   */
+  private async photosOf(lot: Lot, viewer: Viewer): Promise<LotItemPhoto[]> {
+    const items = visibleItems(lot, viewer);
+    const media = await Promise.all(items.map((item) => this.media.findByItem(item.id)));
+    return items.flatMap((item, i) => media[i].photos.map((photo) => ({ ...photo, itemName: item.name })));
   }
 }
 
 /** Quien consulta, para ocultar al estudiante lo que esconde un lote misterioso (ADR-0002). */
 const viewerOf = (principal: Principal) => ({ userId: principal.userId, canManageCatalog: principal.canManageCatalog() });
+
+type Viewer = ReturnType<typeof viewerOf>;
+
+/** Los objetos cuyas fotos puede ver quien consulta: uno misterioso no muestra las suyas. */
+const visibleItems = (lot: Lot, viewer: Viewer) => lot.items.filter((item) => !isHiddenFrom(item, viewer));

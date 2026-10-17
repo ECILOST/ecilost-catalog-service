@@ -6,7 +6,7 @@ import { LotPhotoController } from './photos/lot-photo.controller.js';
 import { LotPhotoService } from './photos/lot-photo.service.js';
 
 @Module({
-  // MediaAssetModule presta el almacen (MEDIA_STORAGE) para las fotografias del lote.
+  // MediaAssetModule presta el almacen para las fotografias del lote y la multimedia de sus objetos.
   imports: [MediaAssetModule],
   controllers: [LotsController, LotPhotoController],
   providers: [LotsService, LotPhotoService],
