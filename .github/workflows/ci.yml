@@ -33,6 +33,10 @@ jobs:
         run: npm run lint
       - name: Tests
         run: npm test
+      # HTTP de punta a punta sobre la aplicacion Nest real, con repositorios y almacenamiento
+      # de medios en memoria: no necesitan base de datos ni S3.
+      - name: E2E tests
+        run: npm run test:e2e
       - name: Build
         run: npm run build
 
