@@ -26,6 +26,9 @@ export class FakeItemRepository implements ItemRepository {
       description: input.description,
       condition: input.condition,
       category: input.category,
+      clues: input.clues ?? [],
+      mystery: false,
+      awardedTo: null,
       status: 'AVAILABLE',
       lotId: null,
       roundId: null,
@@ -48,6 +51,8 @@ export class FakeItemRepository implements ItemRepository {
       .filter((i) => (filter.status ? i.status === filter.status : true))
       .filter((i) => (filter.category ? i.category === filter.category : true))
       .filter((i) => (filter.ids ? filter.ids.includes(i.id) : true))
+      // Igual que el adaptador real (ADR-0002): oculto salvo para quien lo gano.
+      .filter((i) => (filter.visibleTo !== undefined ? !i.mystery || i.awardedTo === filter.visibleTo : true))
       .sort((a, b) => b.registeredAt.getTime() - a.registeredAt.getTime())
       .slice(
         filter.ids ? 0 : filter.offset,
@@ -100,6 +105,9 @@ export class FakeItemRepository implements ItemRepository {
       description: 'Carcasa negra con una calcomania de la universidad.',
       condition: 'GOOD',
       category: 'Electronica',
+      clues: [],
+      mystery: false,
+      awardedTo: null,
       status: 'AVAILABLE',
       lotId: null,
       roundId: null,

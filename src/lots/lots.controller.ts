@@ -35,15 +35,18 @@ export class LotsController {
   @Get()
   @ApiOperation({ summary: 'Consultar lotes' })
   @ApiOkResponse({ type: [LotResponseDto] })
-  async findAll(@Query() query: ListLotsQueryDto): Promise<LotResponseDto[]> {
-    return (await this.lotsService.findAll(query.ids)).map(toLotResponse);
+  async findAll(@CurrentUser() principal: Principal, @Query() query: ListLotsQueryDto): Promise<LotResponseDto[]> {
+    return (await this.lotsService.findAll(query.ids, viewerOf(principal))).map(toLotResponse);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Consultar un lote con sus objetos' })
   @ApiOkResponse({ type: LotResponseDto })
   @ApiNotFoundResponse({ type: ProblemDetailsDto })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<LotResponseDto> {
-    return toLotResponse(await this.lotsService.findOne(id));
+  async findOne(@CurrentUser() principal: Principal, @Param('id', ParseUUIDPipe) id: string): Promise<LotResponseDto> {
+    return toLotResponse(await this.lotsService.findOne(id, viewerOf(principal)));
   }
 }
+
+/** Quien consulta, para ocultar al estudiante lo que esconde un lote misterioso (ADR-0002). */
+const viewerOf = (principal: Principal) => ({ userId: principal.userId, canManageCatalog: principal.canManageCatalog() });
