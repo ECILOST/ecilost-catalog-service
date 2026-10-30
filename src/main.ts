@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { ProblemDetailsFilter } from './common/filters/problem-details.filter.js';
+import { installMetrics } from './observability/metrics.js';
 
 const API_DESCRIPTION = [
   'Catalogo de **ECI Lost & Auction**: los objetos perdidos no reclamados que la',
@@ -15,6 +16,8 @@ const API_DESCRIPTION = [
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  installMetrics(app, 'catalog');
 
   app.useGlobalPipes(
     new ValidationPipe({
