@@ -33,6 +33,7 @@ export class TokenVerifier {
       // Fijar el algoritmo es obligatorio: aceptar el que declare la cabecera permitiria
       // firmar con HS256 usando la llave publica como secreto.
       algorithms: [ALG],
+      requiredClaims: ['exp'],
     });
 
     if (!payload.sub || typeof payload.role !== 'string') {

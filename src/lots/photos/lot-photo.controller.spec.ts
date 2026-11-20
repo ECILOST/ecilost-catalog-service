@@ -70,4 +70,3 @@ describe('LotPhotoController', () => {
     await expect(controller.remove(lotId, photoId)).rejects.toBe(error);
   });
 });
-

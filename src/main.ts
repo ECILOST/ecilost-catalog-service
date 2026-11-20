@@ -11,6 +11,10 @@ const API_DESCRIPTION = [
   'El registro y la administracion del inventario son operaciones de funcionario. La',
   'sesion la emite ecilost-auth-service y este servicio la verifica localmente contra su',
   'JWKS, sin llamarlo en cada peticion.',
+  '',
+  'Usa **Authorize** con el JWT de acceso emitido por Auth. El token debe incluir `exp`',
+  'y seguir vigente. `401` indica credenciales inválidas y `403`, un rol insuficiente',
+  'para la operación. Los errores HTTP usan `application/problem+json`.',
 ].join('\n');
 
 async function bootstrap() {
@@ -41,6 +45,7 @@ function setupSwagger(app: Parameters<typeof SwaggerModule.createDocument>[0]): 
     .addTag('Items', 'Registro y administracion de objetos perdidos')
     .addTag('Lots', 'Agrupacion exclusiva de objetos disponibles')
     .addTag('Multimedia', 'Fotografias y video que documentan el estado del objeto')
+    .addTag('Mystery', 'Vista del lote misterioso por ronda')
     .addTag('Health', 'Liveness')
     .addBearerAuth(
       {
