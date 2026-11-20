@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -31,14 +33,23 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Tests
-        run: npm test
-      # HTTP de punta a punta sobre la aplicacion Nest real, con repositorios y almacenamiento
-      # de medios en memoria: no necesitan base de datos ni S3.
-      - name: E2E tests
-        run: npm run test:e2e
+      - name: Tests with coverage
+        run: npm run test:cov
+      - name: Upload LCOV report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: error
       - name: Build
         run: npm run build
+
+  sonarqube:
+    needs: node
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/sonarcloud.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   # Imagenes en GitHub Container Registry (gratis para paquetes publicos) en lugar de ACR.
   publish-image:

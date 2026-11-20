@@ -50,7 +50,7 @@ interface TokenOptions {
   issuer?: string;
   audience?: string;
   role?: string | null;
-  expiresIn?: string;
+  expiresIn?: string | null;
   key?: CryptoKey;
 }
 
@@ -58,14 +58,14 @@ interface TokenOptions {
 function signToken(options: TokenOptions = {}): Promise<string> {
   const claims = options.role === null ? {} : { role: options.role ?? 'STAFF' };
 
-  return new SignJWT(claims)
+  const jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: ALG, kid, typ: 'JWT' })
     .setSubject(USER_ID)
     .setIssuer(options.issuer ?? TEST_ISSUER)
     .setAudience(options.audience ?? TEST_AUDIENCE)
-    .setIssuedAt()
-    .setExpirationTime(options.expiresIn ?? '900s')
-    .sign(options.key ?? privateKey);
+    .setIssuedAt();
+  if (options.expiresIn !== null) jwt.setExpirationTime(options.expiresIn ?? '900s');
+  return jwt.sign(options.key ?? privateKey);
 }
 
 function newVerifier(): TokenVerifier {
@@ -114,6 +114,16 @@ describe('TokenVerifier', () => {
     await serveJwks();
 
     await expect(newVerifier().verify(await signToken({ expiresIn: '-1s' }))).rejects.toThrow();
+  });
+
+  it('rechaza un token sin el claim exp', async () => {
+    await serveJwks();
+
+    const jwt = await signToken({ expiresIn: null });
+    await expect(newVerifier().verify(jwt)).rejects.toMatchObject({
+      code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
+      claim: 'exp',
+    });
   });
 
   it('rechaza un token firmado con otra llave', async () => {
