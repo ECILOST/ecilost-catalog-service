@@ -61,3 +61,15 @@ La suite de integración usa dobles para la persistencia, el almacenamiento y el
 - [ADR de pertenencia exclusiva a lotes](docs/adr/0001-herencia-auth-catalog-y-exclusividad-lotes.md)
 - [ADR de lote misterioso](docs/adr/0002-lote-misterioso.md)
 - [Configuración de ejemplo](.env.example)
+
+## Cobertura y SonarQube
+
+Ejecuta `npm ci` y luego `npm run test:cov` para generar `coverage/index.html` y
+`coverage/lcov.info`. La cobertura incluye las pruebas unitarias y las pruebas HTTP en memoria.
+Vitest exige al menos un 80 % de cobertura global de líneas por repositorio.
+
+El proyecto de SonarQube Cloud es `ECILOST_ecilost-catalog-service` en la organización `ecilost`.
+Para importar LCOV, desactiva **Automatic Analysis** en **Administration > Analysis Method**.
+Configura `SONAR_TOKEN` como secreto de GitHub Actions con permiso de análisis.
+En cada push a la rama predeterminada, CI invoca `sonarcloud.yml` con el LCOV
+generado por `npm run test:cov` y espera el resultado del Quality Gate.
