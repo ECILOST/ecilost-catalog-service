@@ -41,4 +41,4 @@ function schemaFrom(url: string): string {
   return new URL(url).searchParams.get('schema') ?? 'public';
 }
 
-main().finally(() => prisma.$disconnect());
+await main().finally(() => prisma.$disconnect());
