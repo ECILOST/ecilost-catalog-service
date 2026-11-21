@@ -17,8 +17,11 @@ const API_DESCRIPTION = [
   'para la operación. Los errores HTTP usan `application/problem+json`.',
 ].join('\n');
 
+import { installMetrics } from './observability/metrics.js';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  installMetrics(app, 'catalog');
 
   app.useGlobalPipes(
     new ValidationPipe({
