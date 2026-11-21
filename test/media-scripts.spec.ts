@@ -43,8 +43,8 @@ afterEach(() => {
 });
 
 describe.each([
-  ['cleanup', () => import('./cleanup-azure-orphans.js')],
-  ['migration', () => import('./migrate-minio-to-azure.js')],
+  ['cleanup', () => import('../scripts/cleanup-azure-orphans.js')],
+  ['migration', () => import('../scripts/migrate-minio-to-azure.js')],
 ] as const)('%s script completion', (_name, run) => {
   it('awaits successful work and database disconnection', async () => {
     await run();
